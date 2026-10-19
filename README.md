@@ -70,17 +70,20 @@ uv run dsp --help
 | `dsp validate [--strict]` | Checks the manifest, hotspot rules, the loop and every referenced file. Exits 1 on errors (or on warnings with `--strict`). | no |
 | `dsp schema [--check]` | Writes `schema/scenes.schema.json` from the pipeline's models; `--check` only verifies it. | no |
 | `dsp placeholders [--overwrite-masters] [--reset-manifest]` | Writes synthetic masters, masks, exports and `web/public/scenes.json`. Keeps real masters unless `--overwrite-masters`, and an existing `content/scenes.yaml` unless `--reset-manifest`; each flag destroys that kind of work. | no |
-| `dsp generate --scene <id> \| --all` | Generates candidate images. | yes |
-| `dsp select --scene <id> \| --all` | Claude scores candidates and picks the master. | yes |
-| `dsp grade [--preview]` | Applies the colour grade to every master. | no |
+| `dsp generate --scene <id> \| --all [--candidates 4] [--provider gemini\|openai] [--no-reference] [--force] [--size 2K] [--quality high] [--dry-run]` | Builds each prompt from the style block in `content/style.md` and the scene, attaches the ungraded style-anchor master (except for the anchor itself), and writes `assets/candidates/<scene>/cand-<n>.png`. Skips existing candidates unless `--force`. Logs every call to `pipeline/logs/generations.jsonl`. | yes |
+| `dsp select --scene <id> \| --all [--repick] [--dry-run]` | Claude scores the candidates against the rubric, writes `assets/review/<scene>/scores.json` and a contact sheet, records the winner in `content/scenes.yaml` (unless one is already pinned) and copies it to `assets/masters/<scene>.png`. | yes |
+| `dsp grade [--preview]` | Applies the colour grade from `content/grade.toml` to every master, writing `<scene>.graded.png`; `--preview` writes before/after pairs to `assets/review/grade.html`. Placeholder masters keep their graded copy. | no |
 | `dsp hotspot --scene <id> \| --all [--force] [--box x0 y0 x1 y1] [--dry-run]` | Segments the bridge object into a hotspot polygon, has Claude verify it, and writes it to `content/scenes.yaml`. `--dry-run` needs no keys. | yes |
-| `dsp export` | Writes the image variants and `scenes.json`. | no |
-| `dsp review` | Rebuilds the contact sheets. | no |
+| `dsp export [--check]` | Writes the AVIF/WebP variants, blurred previews and `web/public/scenes.json` from the graded masters, then verifies every file against its hash; `--check` only reports what would change. | no |
+| `dsp review` | Rebuilds every contact sheet and `assets/review/index.html`, which shows all graded masters side by side. | no |
 | `dsp morph --edge <a> <b> \| --all` | Renders morph clips between scenes. | yes |
-| `dsp bakeoff` | Compares image providers on the first scene. | yes |
+| `dsp bakeoff [--candidates 4] [--force] [--quality high] [--dry-run]` | Generates the first scene with Gemini and OpenAI, grades every image, has Claude score them blind and writes `assets/review/bakeoff.html`. | yes |
 
-Only `validate`, `schema`, `placeholders` and `hotspot` are implemented so far; the others
-print "not implemented yet" and exit with status 2. See section 10 of the plan for every option.
+Commands that call a paid API print their estimated spend first and refuse to go past
+`DSP_MAX_SPEND_USD` (15 US dollars when unset or empty) in one run; `--dry-run` prints the exact
+requests without sending anything. Rate limits and server errors are retried with backoff.
+`morph` is not implemented yet; it exits with status 2. See section 10 of the
+plan for every option.
 
 ### Hotspots
 
