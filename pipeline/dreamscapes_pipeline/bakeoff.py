@@ -38,7 +38,7 @@ from .grade import GradeConfigError, grade_image, load_grade_params
 from .imaging import fit_master, png_bytes, sha256_file, write_if_changed
 from .layout import RepoPaths
 from .manifest import Manifest
-from .providers import ASPECT, ImageProvider, ProviderError
+from .providers import ASPECT, ImageProvider, MissingCredentials, ProviderError
 from .select import (
     WEIGHTS,
     ClaudeJudge,
@@ -164,7 +164,7 @@ def run_bakeoff(
                 sleep=sleep,
             )
             failed.extend(outcome.failed)
-    except SpendLimitExceeded as error:
+    except (SpendLimitExceeded, MissingCredentials) as error:
         echo(f"error: {error}")
         return 1
 

@@ -28,7 +28,7 @@ from .imaging import as_png, sha256_bytes
 from .layout import RepoPaths
 from .manifest import Manifest, Scene
 from .placeholders import is_placeholder_image
-from .providers import ASPECT, ImageProvider, ProviderError, ReferenceImage
+from .providers import ASPECT, ImageProvider, MissingCredentials, ProviderError, ReferenceImage
 from .retry import with_retries
 from .spend import SpendGuard, SpendLimitExceeded
 
@@ -354,6 +354,8 @@ def execute_plan(
                 echo=echo,
                 sleep=sleep,
             )
+        except MissingCredentials:
+            raise  # nothing was sent, so there is nothing to log; the run stops
         except ProviderError as error:
             row.update(
                 status="error",
@@ -468,7 +470,7 @@ def run_generate(
         outcome = execute_plan(
             paths, provider, plan, size=size, style=style, guard=guard, echo=echo, sleep=sleep
         )
-    except SpendLimitExceeded as error:
+    except (SpendLimitExceeded, MissingCredentials) as error:
         echo(f"error: {error}")
         return 1
     echo(

@@ -231,8 +231,8 @@ def run_export(paths: RepoPaths, *, check: bool = False) -> ExportReport:
     """
     report = ExportReport()
     manifest = load_manifest(paths.scenes_yaml)
-    exports: dict[str, SceneExport] = {}
     polygons: dict[str, list[tuple[float, float]]] = {}
+    # Check every scene before encoding anything: encoding is the slow part.
     for scene in manifest.scenes:
         graded = paths.graded(scene.id)
         if not graded.exists():
@@ -240,19 +240,26 @@ def run_export(paths: RepoPaths, *, check: bool = False) -> ExportReport:
                 f"{scene.id}: assets/masters/{scene.id}.graded.png is missing; run `dsp grade`"
             )
             continue
+        with Image.open(graded) as opened:
+            size = opened.size
+        if size != (MASTER_WIDTH, MASTER_HEIGHT):
+            report.errors.append(
+                f"{scene.id}: assets/masters/{scene.id}.graded.png is {size[0]}x{size[1]}, "
+                f"expected {MASTER_WIDTH}x{MASTER_HEIGHT}"
+            )
+            continue
         polygon, problem = hotspot_polygon(paths, scene)
         if polygon is None:
             report.errors.append(f"{scene.id}: {problem}")
-            continue
-        try:
-            exports[scene.id] = render_scene_exports(paths, scene.id, graded)
-        except ValueError as error:
-            report.errors.append(f"{scene.id}: {error}")
             continue
         polygons[scene.id] = polygon
     if report.errors:
         report.scenes_json = "skipped"
         return report
+    exports = {
+        scene.id: render_scene_exports(paths, scene.id, paths.graded(scene.id))
+        for scene in manifest.scenes
+    }
 
     try:
         built = BuiltManifest(

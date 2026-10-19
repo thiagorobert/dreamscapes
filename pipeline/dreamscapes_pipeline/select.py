@@ -42,7 +42,12 @@ from .imaging import jpeg_preview, master_png_from, sha256_file, write_if_change
 from .layout import RepoPaths
 from .manifest import Generation, Manifest, Scene, dump_manifest, save_manifest
 from .placeholders import is_placeholder_image
-from .providers.base import ProviderError, is_retryable_status, retry_after_seconds
+from .providers.base import (
+    MissingCredentials,
+    ProviderError,
+    is_retryable_status,
+    retry_after_seconds,
+)
 from .retry import with_retries
 from .spend import SpendGuard, SpendLimitExceeded
 
@@ -305,8 +310,6 @@ class ClaudeJudge:
         if self._client is None:
             key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
             if not key:
-                from .providers.base import MissingCredentials
-
                 raise MissingCredentials("ANTHROPIC_API_KEY is not set; add it to .env")
             import anthropic
 
@@ -582,6 +585,8 @@ def score_with_log(
         result = with_retries(
             lambda: judge.score(job), what=f"scoring {job.scene_id}", echo=echo, sleep=sleep
         )
+    except MissingCredentials:
+        raise  # nothing was sent, so there is nothing to log
     except ProviderError as error:
         row.update(
             status="error",
@@ -700,6 +705,7 @@ def run_select(
             echo(f"{scene_id}: pinned to cand-{pinned} (use --repick to score again)")
             adopt_candidate(paths, scene, pinned, available[pinned], rows, echo=echo)
             outcome.selected[scene_id] = pinned
+            write_contact_sheet(paths, manifest, scene_id)
             continue
         jobs.append(build_job(paths, manifest, scene, style_block))
 
@@ -750,8 +756,6 @@ def run_select(
             write_if_changed(target, (json.dumps(document, indent=2) + "\n").encode("utf-8"))
         else:
             echo(f"{job.scene_id}: reusing scores.json (candidates unchanged)")
-        sheet_path = write_contact_sheet(paths, manifest, job.scene_id)
-        echo(f"  contact sheet: {_rel(paths, sheet_path)}")
         for entry in document["candidates"]:
             verdict = "pass" if entry["passed"] else "FAIL: " + ", ".join(entry["fail_reasons"])
             echo(f"  cand-{entry['candidate']}: {entry['total']:.2f} ({verdict})")
@@ -759,10 +763,13 @@ def run_select(
         if winner is None:
             echo(f"{job.scene_id}: no candidate passed the rubric. {document.get('advice', '')}")
             outcome.failed.append(job.scene_id)
-            continue
-        echo(f"{job.scene_id}: selected cand-{winner}")
-        adopt_candidate(paths, scene, winner, dict(job.candidates)[winner], rows, echo=echo)
-        outcome.selected[job.scene_id] = winner
+        else:
+            echo(f"{job.scene_id}: selected cand-{winner}")
+            adopt_candidate(paths, scene, winner, dict(job.candidates)[winner], rows, echo=echo)
+            outcome.selected[job.scene_id] = winner
+        # Rendered after the choice is recorded, so the sheet marks the selected candidate.
+        sheet_path = write_contact_sheet(paths, manifest, job.scene_id)
+        echo(f"  contact sheet: {_rel(paths, sheet_path)}")
 
     if dump_manifest(manifest) != before:
         save_manifest(manifest, paths.scenes_yaml)
