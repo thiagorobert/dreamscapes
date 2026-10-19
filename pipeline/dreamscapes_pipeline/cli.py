@@ -148,6 +148,61 @@ def placeholders(
         typer.echo(f"note: {note}")
 
 
+def _fail(message: str) -> NoReturn:
+    typer.echo(f"error: {message}", err=True)
+    raise typer.Exit(1)
+
+
+def _manifest(paths: RepoPaths):  # -> Manifest; imported lazily like the rest of the CLI
+    from .manifest import load_manifest
+
+    try:
+        return load_manifest(paths.scenes_yaml)
+    except ManifestError as error:
+        _fail(str(error))
+
+
+def _pick_scenes(manifest, scene: str | None, all_: bool) -> list[str]:
+    """The scenes a command works on. With --all the style anchor comes first, because every
+    other scene's generation and scoring depends on the anchor's master."""
+    ids = [s.id for s in manifest.scenes]
+    if scene and all_:
+        _fail("pass either --scene <id> or --all, not both")
+    if all_:
+        anchor = manifest.style_anchor
+        return [anchor, *[i for i in ids if i != anchor]] if anchor in ids else ids
+    if scene:
+        if scene not in ids:
+            _fail(f"unknown scene '{scene}'; known scenes: {', '.join(ids)}")
+        return [scene]
+    _fail("pass --scene <id> or --all")
+
+
+def _spend_guard():
+    from .spend import SpendGuard
+
+    try:
+        return SpendGuard.from_env()
+    except ValueError as error:
+        _fail(str(error))
+
+
+SizeOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--size",
+        help="Image size: 1K, 2K or 4K for gemini; WIDTHxHEIGHT (multiples of 16) or 1K/2K/4K "
+        "for openai. Defaults to the 2K-class master size.",
+    ),
+]
+QualityOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--quality", help="openai only: low, medium, high (the default), xhigh, max or auto."
+    ),
+]
+
+
 @app.command()
 def generate(
     scene: SceneOpt = None,
@@ -168,9 +223,40 @@ def generate(
         bool, typer.Option("--force", help="Regenerate candidates that already exist.")
     ] = False,
     dry_run: DryRunOpt = False,
+    size: SizeOpt = None,
+    quality: QualityOpt = None,
+    model: Annotated[
+        str | None, typer.Option("--model", help="Use this model instead of the default.")
+    ] = None,
 ) -> None:
     """Generate candidate images from the style bible and the scene description."""
-    _not_implemented("generate")
+    from . import providers
+    from .generate import run_generate
+
+    paths = _repo()
+    manifest = _manifest(paths)
+    scene_ids = _pick_scenes(manifest, scene, all_)
+    try:
+        image_provider = providers.make_image_provider(
+            provider, model=model, quality=quality, root=paths.root
+        )
+    except ValueError as error:
+        _fail(str(error))
+    guard = _spend_guard()
+    code = run_generate(
+        paths,
+        manifest,
+        scene_ids,
+        image_provider,
+        count=candidates,
+        size=size,
+        no_reference=no_reference,
+        force=force,
+        dry_run=dry_run,
+        guard=guard,
+        echo=typer.echo,
+    )
+    raise typer.Exit(code)
 
 
 @app.command()
@@ -183,7 +269,23 @@ def select(
     dry_run: DryRunOpt = False,
 ) -> None:
     """Have Claude score the candidates, write a contact sheet and copy the winner to masters."""
-    _not_implemented("select")
+    from . import select as selection
+
+    paths = _repo()
+    manifest = _manifest(paths)
+    scene_ids = _pick_scenes(manifest, scene, all_)
+    guard = _spend_guard()
+    code = selection.run_select(
+        paths,
+        manifest,
+        scene_ids,
+        judge=selection.make_judge(paths.root),
+        repick=repick,
+        dry_run=dry_run,
+        guard=guard,
+        echo=typer.echo,
+    )
+    raise typer.Exit(code)
 
 
 @app.command()
@@ -193,7 +295,30 @@ def grade(
     ] = False,
 ) -> None:
     """Apply the deterministic colour grade to every master."""
-    _not_implemented("grade")
+    from .grade import GradeConfigError, load_grade_params, run_grade
+
+    paths = _repo()
+    manifest = _manifest(paths)
+    try:
+        loaded = load_grade_params(paths)
+    except GradeConfigError as error:
+        _fail(str(error))
+    typer.echo(f"grade parameters from {loaded.source}")
+    for warning in loaded.warnings:
+        typer.echo(f"warning: {warning}")
+    report = run_grade(paths, manifest, preview=preview, loaded=loaded)
+    if report.written:
+        typer.echo(f"graded: {', '.join(report.written)}")
+    if report.unchanged:
+        typer.echo(f"already up to date: {', '.join(report.unchanged)}")
+    if report.placeholders:
+        typer.echo(
+            "left placeholder masters to dsp placeholders: " + ", ".join(report.placeholders)
+        )
+    if report.missing:
+        typer.echo(f"no master yet: {', '.join(report.missing)}")
+    if report.preview_page is not None:
+        typer.echo(f"wrote {report.preview_page.relative_to(paths.root).as_posix()}")
 
 
 @app.command()
@@ -239,15 +364,56 @@ def hotspot(
 
 
 @app.command()
-def export() -> None:
+def export(
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check", help="Write nothing; exit 1 if running export would change any file."
+        ),
+    ] = False,
+) -> None:
     """Write AVIF/WebP variants, blurred previews and web/public/scenes.json from graded masters."""
-    _not_implemented("export")
+    from .export import run_export
+
+    paths = _repo()
+    try:
+        report = run_export(paths, check=check)
+    except ManifestError as error:
+        _fail(str(error))
+    for problem in report.errors:
+        typer.echo(f"error: {problem}", err=True)
+    if report.errors:
+        raise typer.Exit(1)
+    if check:
+        if report.changed:
+            typer.echo("export is out of date; `dsp export` would change:")
+            for path in report.changed:
+                typer.echo(f"  {path}")
+            raise typer.Exit(1)
+        typer.echo(f"exports and scenes.json are up to date ({len(report.scenes)} scenes)")
+        return
+    typer.echo(f"exported {len(report.scenes)} scenes; {len(report.changed)} file(s) changed")
+    for path in report.changed:
+        typer.echo(f"  {path}")
+    typer.echo(
+        "web/public/scenes.json is unchanged"
+        if report.scenes_json == "unchanged"
+        else "wrote web/public/scenes.json"
+    )
+    typer.echo("verified: every exported file matches the hash in its name")
 
 
 @app.command()
 def review() -> None:
     """Rebuild every contact sheet and the review index page."""
-    _not_implemented("review")
+    from .review import run_review
+
+    paths = _repo()
+    manifest = _manifest(paths)
+    report = run_review(paths, manifest)
+    typer.echo(f"rebuilt {len(report.contact_sheets)} contact sheet(s)")
+    if report.index is not None:
+        typer.echo(f"wrote {report.index.relative_to(paths.root).as_posix()}")
 
 
 @app.command()
@@ -264,9 +430,43 @@ def morph(
 
 
 @app.command()
-def bakeoff(dry_run: DryRunOpt = False) -> None:
+def bakeoff(
+    dry_run: DryRunOpt = False,
+    candidates: Annotated[
+        int, typer.Option("--candidates", min=1, help="Images per provider.")
+    ] = 4,
+    force: Annotated[
+        bool, typer.Option("--force", help="Regenerate bake-off images that already exist.")
+    ] = False,
+    quality: QualityOpt = None,
+) -> None:
     """Generate the first scene with each image provider and write a comparison sheet."""
-    _not_implemented("bakeoff")
+    from . import providers
+    from . import select as selection
+    from .bakeoff import run_bakeoff
+
+    paths = _repo()
+    manifest = _manifest(paths)
+    try:
+        contenders = [
+            providers.make_image_provider("gemini", root=paths.root),
+            providers.make_image_provider("openai", quality=quality, root=paths.root),
+        ]
+    except ValueError as error:
+        _fail(str(error))
+    guard = _spend_guard()
+    code = run_bakeoff(
+        paths,
+        manifest,
+        contenders,
+        count=candidates,
+        force=force,
+        dry_run=dry_run,
+        judge=selection.make_judge(paths.root),
+        guard=guard,
+        echo=typer.echo,
+    )
+    raise typer.Exit(code)
 
 
 def main() -> None:
