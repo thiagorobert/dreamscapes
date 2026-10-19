@@ -62,12 +62,23 @@ jobs:
         run: pnpm typecheck
       - name: Unit tests
         run: pnpm test
-      - name: Build
+      - name: Build for the root path
         run: pnpm build
       - name: Install Playwright's Chromium
         run: pnpm exec playwright install --with-deps chromium
-      - name: End-to-end tests against the built site
+      - name: End-to-end tests against the root-path build
         run: pnpm e2e
+      # GitHub Pages serves the site from /dreamscapes/. Building and testing that variant here
+      # catches root-absolute URLs (such as fetching "/scenes.json") before they reach the
+      # deployed site; playwright.config.ts picks up the same base path from GITHUB_PAGES.
+      - name: Build for the GitHub Pages base path
+        run: pnpm build
+        env:
+          GITHUB_PAGES: '1'
+      - name: End-to-end tests against the GitHub Pages build
+        run: pnpm e2e
+        env:
+          GITHUB_PAGES: '1'
       - name: Upload the Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7
