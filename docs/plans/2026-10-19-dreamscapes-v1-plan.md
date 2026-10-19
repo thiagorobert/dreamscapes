@@ -2,7 +2,58 @@
 
 Date: 2026-10-19
 Owner: Thiago (product decisions); orchestrated by the main Claude session; implemented by Opus subagents.
-Status: approved by Thiago on 2026-10-19 (see §15); implementation in progress. Section 2 lists every decision taken on Thiago's behalf.
+Status: approved by Thiago on 2026-10-19 (see §15); v1 shipped the same day (see "Status" below). Section 2 lists every decision taken on Thiago's behalf.
+
+---
+
+## Status (2026-10-19)
+
+**v1 is live at <https://blog.thiago.pub/dreamscapes/>.** The repository is public. The account's user site owns the custom domain, so this project is served under it at `/dreamscapes/`, deployed by `.github/workflows/deploy.yml` on every push to `main`.
+
+What shipped:
+- Ten generated scenes in a closed loop (Gemini `gemini-nano-banana-2.1` at 2K, every scene anchored on `cliff-cottage`, picked by Claude, colour-graded), exported as AVIF and WebP at four widths with blurred previews.
+- A verified hotspot on every scene. Nine were traced by Gemini segmentation and confirmed by Claude; the bicycle was drawn by hand in `tools/annotate` and confirmed by Claude.
+- Nine Veo 3.1 Fast morph clips. The tenth edge keeps the CSS zoom.
+- The static site: vanilla TypeScript, 7.7 KB of gzipped JavaScript, unit tests and Playwright e2e at desktop and iPhone 13 sizes. CI runs the pipeline and web checks on both base paths.
+- Checked on the live site on 2026-10-19 with `pnpm walk` (in `web/`), at 1440x900 and in the iPhone 13 profile. All ten steps advanced the hash and counter. The nine clip edges each played their clip to 8.0 s, and the zoom edge zoomed. The loop closed at "dream 11". Back, forward, a deep link and an unknown hash behaved, with 0 console errors and 0 failed requests. Lighthouse (12.8 and 13.5) on the live site scored 100 in performance, accessibility, best practices and SEO, on both the desktop and mobile presets. The only sizeable flag is cache lifetime: GitHub Pages serves everything with `max-age=600`, which cannot be changed there.
+
+Merged pull requests (all in `thiagorobert/dreamscapes`):
+
+| PR | Title |
+|---|---|
+| #1 | Scaffold the repository: manifest models, pipeline CLI, placeholder scenes, web app shell and CI |
+| #2 | Write the scene loop, style bible and colour grade |
+| #3 | Build the web app: stage, hotspot, transitions, hints, routing and tests |
+| #4 | Add hotspot extraction: Gemini segmentation, Claude verification and a manual annotator |
+| #5 | Add the generation pipeline: providers, generate, select, grade, export, review and bakeoff |
+| #6 | Produce the ten real scenes |
+| #7 | Fix Gemini mask point order and verify the five pending hotspots |
+| #8 | Add Veo morph clips between scenes (dsp morph) |
+
+The final QA, live-walk script and README how-tos are on the `finish-v1-qa-and-docs` branch.
+
+Main deviations from this plan:
+- **Gemini's Interactions API instead of `generate_content`**, for both image generation (#5) and segmentation (#4), because that is the shape the current Gemini docs describe. Segmentation uses `gemini-3.8-flash`.
+- **Segmentation masks sometimes come back as `[y, x]`**, not the documented `[x, y]`, while `box_2d` keeps its order. That happened on five of the ten scenes. `dsp hotspot` now reads every mask four ways and keeps the reading that fits its own box (#7). Masks that switch order part-way round remain a known limit, which is why the bicycle was drawn by hand.
+- **Clips ship at 720p, not 1080p.** Veo renders at 1080p, but every 1080p encode came out at 6-9 MB, over the 5 MB per-clip cap, so ffmpeg scales them to 1280x720 (1.8-3.9 MB each). They are H.264 MP4 only; no WebM is made (#8).
+- **One edge keeps the zoom:** mountain-road-phonebox -> drowned-street. All three Veo takes wrote garbled lettering on the phone box or the shopfronts (#8).
+- **`transition.duration` is required** whenever `transition.type` is `video` (the example in §8.2 had only the path). `dsp morph` measures it with ffprobe.
+- **`bridge` is a single object**, not the list §2 anticipated for branching. A list remains a schema change for later.
+- **Extra bridge verification fields:** `verified_master_sha256`, `verified_image` and `verified_image_sha256` record what a hotspot was checked against. `dsp hotspot --all` redoes a scene when its master or graded image changes (#7). The built `scenes.json` and its schema are unchanged.
+- Smaller ones: Vite 8 and TypeScript 6 instead of Vite 6 (#1); Pillow 13 encodes AVIF natively, so no AVIF plugin was added (#1).
+
+Spend: **$20.55** across the 129 calls in `pipeline/logs/generations.jsonl`. Every row reports its own `cost_usd`, so no estimate was needed:
+
+| Item | Calls | Cost |
+|---|---|---|
+| Veo morph clips (ten edges plus five retakes, $0.96 each) | 15 | $14.40 |
+| Gemini scene images | 64 | $4.02 |
+| Claude candidate scoring | 15 | $1.24 |
+| Bake-off: 4 Gemini and 4 OpenAI images, plus 1 Claude scoring call | 9 | $0.55 |
+| Claude hotspot verification | 13 | $0.28 |
+| Gemini segmentation | 13 | $0.04 |
+
+Two earlier amounts are not in the log, which did not record them at the time: about $1.06 of hotspot calls during #6, before hotspot calls were logged, and about $0.10 of smoke-test calls in #5. That makes about $21.70 in all, against the ≈ $20 that §5.7 estimated for v1 plus the optional clips.
 
 ---
 
