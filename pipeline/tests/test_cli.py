@@ -1,11 +1,27 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
 from dreamscapes_pipeline.cli import app
 
 runner = CliRunner()
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def plain_help(args: list[str]) -> str:
+    """Help text without terminal styling.
+
+    Typer styles help with Rich, and forces that styling on under GitHub Actions; the escape
+    codes then split option names such as --overwrite-masters into separate spans.
+    """
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    return _ANSI.sub("", result.output)
+
 
 COMMANDS = [
     "validate",
@@ -38,10 +54,9 @@ STUBS = [
 
 
 def test_help_lists_every_command():
-    result = runner.invoke(app, ["--help"])
-    assert result.exit_code == 0
+    help_text = plain_help(["--help"])
     for command in COMMANDS:
-        assert command in result.output
+        assert command in help_text
 
 
 @pytest.mark.parametrize("args", STUBS, ids=lambda a: " ".join(a))
@@ -97,7 +112,7 @@ def test_placeholders_command_reports_what_it_did(placeholder_repo, monkeypatch)
 
 def test_placeholders_destructive_flags(placeholder_repo, monkeypatch):
     monkeypatch.chdir(placeholder_repo.root)
-    help_text = runner.invoke(app, ["placeholders", "--help"]).output
+    help_text = plain_help(["placeholders", "--help"])
     assert "--overwrite-masters" in help_text and "--reset-manifest" in help_text
     # The old catch-all flag is gone so nobody destroys both kinds of work by habit.
     assert runner.invoke(app, ["placeholders", "--force"]).exit_code == 2
