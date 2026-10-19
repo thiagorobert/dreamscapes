@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "BuiltBridge": {
+      "additionalProperties": false,
+      "properties": {
+        "object": {
+          "title": "Object",
+          "type": "string"
+        },
+        "polygon": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 3,
+          "title": "Polygon",
+          "type": "array"
+        },
+        "bbox": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            }
+          ],
+          "title": "Bbox",
+          "type": "array"
+        },
+        "centroid": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            }
+          ],
+          "title": "Centroid",
+          "type": "array"
+        },
+        "area": {
+          "description": "Fraction of the frame the polygon covers.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Area",
+          "type": "number"
+        }
+      },
+      "required": [
+        "object",
+        "polygon",
+        "bbox",
+        "centroid",
+        "area"
+      ],
+      "title": "BuiltBridge",
+      "type": "object"
+    },
+    "BuiltScene": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "alt": {
+          "title": "Alt",
+          "type": "string"
+        },
+        "next": {
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Next",
+          "type": "string"
+        },
+        "focal": {
+          "description": "Resolved pan focus (the hotspot centroid by default).",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            }
+          ],
+          "title": "Focal",
+          "type": "array"
+        },
+        "bridge": {
+          "$ref": "#/$defs/BuiltBridge"
+        },
+        "image": {
+          "$ref": "#/$defs/SceneImage"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ZoomTransition"
+            },
+            {
+              "$ref": "#/$defs/VideoTransition"
+            }
+          ],
+          "title": "Transition"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "alt",
+        "next",
+        "focal",
+        "bridge",
+        "image",
+        "transition"
+      ],
+      "title": "BuiltScene",
+      "type": "object"
+    },
+    "ImageSource": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "description": "Pixel width of this file.",
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "src": {
+          "description": "Path relative to the site root, e.g. dreams/a/a-1024.1f2e3d4c.webp.",
+          "minLength": 1,
+          "title": "Src",
+          "type": "string"
+        }
+      },
+      "required": [
+        "width",
+        "src"
+      ],
+      "title": "ImageSource",
+      "type": "object"
+    },
+    "ImageSources": {
+      "additionalProperties": false,
+      "description": "Files per format, sorted by ascending width.",
+      "properties": {
+        "avif": {
+          "items": {
+            "$ref": "#/$defs/ImageSource"
+          },
+          "title": "Avif",
+          "type": "array"
+        },
+        "webp": {
+          "items": {
+            "$ref": "#/$defs/ImageSource"
+          },
+          "minItems": 1,
+          "title": "Webp",
+          "type": "array"
+        }
+      },
+      "required": [
+        "avif",
+        "webp"
+      ],
+      "title": "ImageSources",
+      "type": "object"
+    },
+    "SceneImage": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "description": "Width of the master the exports were made from.",
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "description": "Height of the master the exports were made from.",
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "sources": {
+          "$ref": "#/$defs/ImageSources"
+        },
+        "lqip": {
+          "description": "Tiny blurred placeholder painted before the full image loads.",
+          "pattern": "^data:image/(webp|png|jpeg|avif);base64,[A-Za-z0-9+/=]+$",
+          "title": "Lqip",
+          "type": "string"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "sources",
+        "lqip"
+      ],
+      "title": "SceneImage",
+      "type": "object"
+    },
+    "VideoTransition": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "video",
+          "title": "Type",
+          "type": "string"
+        },
+        "video": {
+          "description": "Clip path relative to the site root.",
+          "minLength": 1,
+          "title": "Video",
+          "type": "string"
+        },
+        "duration": {
+          "description": "Clip length in seconds.",
+          "exclusiveMinimum": 0.0,
+          "title": "Duration",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "video",
+        "duration"
+      ],
+      "title": "VideoTransition",
+      "type": "object"
+    },
+    "ZoomTransition": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "zoom",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ZoomTransition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "What the website loads.",
+  "properties": {
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "start": {
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Start",
+      "type": "string"
+    },
+    "scenes": {
+      "items": {
+        "$ref": "#/$defs/BuiltScene"
+      },
+      "minItems": 1,
+      "title": "Scenes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "start",
+    "scenes"
+  ],
+  "title": "Dreamscapes built manifest",
+  "type": "object"
+}
