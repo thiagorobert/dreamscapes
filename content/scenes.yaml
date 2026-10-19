@@ -18,46 +18,46 @@ scenes:
     bridge:
       object: lighthouse
       placement: >-
-        right of centre on the headland across the cove, a stout tower with a broad base and a railed
-        lamp gallery, about half the frame height tall, its top about a fifth of the way down from
-        the upper edge
+        about two thirds of the way across the frame, on a near headland just across a narrow cove,
+        close enough to read clearly: a stout, wide pale stone tower with a broad base, a railed lamp
+        gallery and a small keeper's house at its foot, rising from just below the middle of the frame
+        to about a fifth of the way down from the top edge, and about a tenth of the frame width wide
       polygon:
-        - [0.7732, 0.3]
-        - [0.7718, 0.3254]
-        - [0.7677, 0.3498]
-        - [0.7609, 0.3723]
-        - [0.7518, 0.3921]
-        - [0.7407, 0.4083]
-        - [0.728, 0.4203]
-        - [0.7143, 0.4277]
-        - [0.7, 0.4302]
-        - [0.6857, 0.4277]
-        - [0.672, 0.4203]
-        - [0.6593, 0.4083]
-        - [0.6482, 0.3921]
-        - [0.6391, 0.3723]
-        - [0.6323, 0.3498]
-        - [0.6282, 0.3254]
-        - [0.6268, 0.3]
-        - [0.6282, 0.2746]
-        - [0.6323, 0.2502]
-        - [0.6391, 0.2277]
-        - [0.6482, 0.2079]
-        - [0.6593, 0.1917]
-        - [0.672, 0.1797]
-        - [0.6857, 0.1723]
-        - [0.7, 0.1698]
-        - [0.7143, 0.1723]
-        - [0.728, 0.1797]
-        - [0.7407, 0.1917]
-        - [0.7518, 0.2079]
-        - [0.7609, 0.2277]
-        - [0.7677, 0.2502]
-        - [0.7718, 0.2746]
-      source: placeholder
-      verified: false
+        - [0.7122, 0.2218]
+        - [0.7092, 0.2261]
+        - [0.6985, 0.2556]
+        - [0.6873, 0.2921]
+        - [0.6833, 0.4683]
+        - [0.6833, 0.5109]
+        - [0.6853, 0.5152]
+        - [0.6882, 0.5169]
+        - [0.7214, 0.5178]
+        - [0.7878, 0.5056]
+        - [0.7908, 0.5004]
+        - [0.7908, 0.4944]
+        - [0.7849, 0.4544]
+        - [0.7317, 0.2609]
+        - [0.719, 0.2261]
+        - [0.7161, 0.2218]
+      source: gemini
+      verified: true
+      verification: >-
+        The outline encloses the whole lighthouse: the tower from the finial and lit lamp gallery
+        down to its base, plus the attached keeper's house. The only extra area is the sky wedge that
+        the convex outline sweeps in between the tower and the house roof, which comes from the object's
+        shape rather than from including other objects.
       needs_manual_hotspot: false
+      bbox: [0.6833, 0.2218, 0.7908, 0.5178]
+      centroid: [0.726608, 0.40014]
+      area: 0.020915
     next: prison-yard
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 5
+      log_ids:
+        - ecd6cb5ce4304ec3
+        - 79c923831cbe4d97
     transition:
       type: zoom
   - id: prison-yard
