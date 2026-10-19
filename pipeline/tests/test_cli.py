@@ -43,8 +43,6 @@ STUBS = [
     ["select", "--scene", "cliff-cottage", "--repick"],
     ["select", "--all", "--dry-run"],
     ["grade", "--preview"],
-    ["hotspot", "--scene", "prison-yard", "--box", "0.1", "0.2", "0.3", "0.4", "--dry-run"],
-    ["hotspot", "--all"],
     ["export"],
     ["review"],
     ["morph", "--edge", "cliff-cottage", "prison-yard", "--dry-run"],
