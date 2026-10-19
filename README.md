@@ -55,7 +55,9 @@ for the root path `/`. To test a Pages build locally:
 
 Needs [uv](https://docs.astral.sh/uv/); it installs Python 3.12 itself. Copy `.env.example` to
 `.env` and fill in the keys for the commands that call paid APIs. Commands find the repository
-root by walking up from the current directory, so they work from anywhere inside the checkout.
+root by walking up from the current directory to the first directory that holds both `content/`
+and `pipeline/pyproject.toml`, so they work from anywhere inside the checkout and never mistake
+another project's `content/` folder for this one.
 
 ```sh
 cd pipeline

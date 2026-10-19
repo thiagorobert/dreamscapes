@@ -1,7 +1,8 @@
 """The `dsp` command line: `uv run dsp <command>` from anywhere inside the repository.
 
 Every command finds the repository root by walking up from the current directory to the first
-directory that contains ``content/``, and resolves all paths from there.
+directory that contains both ``content/`` and ``pipeline/pyproject.toml``, and resolves all
+paths from there.
 
 `validate`, `schema` and `placeholders` work today. The other commands are registered with
 their final names and options so scripts and docs can rely on them; the work packages that

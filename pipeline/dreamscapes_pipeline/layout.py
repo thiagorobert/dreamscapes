@@ -1,7 +1,8 @@
 """Repository layout and image geometry shared by every pipeline command.
 
-All paths are resolved relative to the repository root, which is the nearest directory at or
-above the current working directory that contains a ``content/`` directory.
+All paths are resolved relative to the repository root: the nearest directory at or above the
+current working directory that contains both a ``content/`` directory and
+``pipeline/pyproject.toml``.
 """
 
 from __future__ import annotations
@@ -22,18 +23,28 @@ def export_height(width: int) -> int:
 
 
 class RepoRootNotFound(RuntimeError):
-    """Raised when no directory containing ``content/`` exists at or above the start path."""
+    """Raised when no Dreamscapes repository root exists at or above the start path."""
+
+
+def is_repo_root(path: Path) -> bool:
+    """True for a Dreamscapes checkout.
+
+    A ``content/`` directory alone is not enough: static-site generators such as Hugo or Astro
+    use the same name, and treating such a project as the root would make `dsp` write into it
+    and load its ``.env``. Requiring the pipeline's own ``pyproject.toml`` as well rules that out.
+    """
+    return (path / "content").is_dir() and (path / "pipeline" / "pyproject.toml").is_file()
 
 
 def find_repo_root(start: Path | None = None) -> Path:
-    """Walk up from ``start`` (default: the current directory) to the directory holding content/."""
+    """Walk up from ``start`` (default: the current directory) to the repository root."""
     here = (start or Path.cwd()).resolve()
     for candidate in (here, *here.parents):
-        if (candidate / "content").is_dir():
+        if is_repo_root(candidate):
             return candidate
     raise RepoRootNotFound(
-        f"could not find the Dreamscapes repository root: no directory containing 'content/' "
-        f"at or above {here}"
+        "could not find the Dreamscapes repository root: no directory containing both "
+        f"'content/' and 'pipeline/pyproject.toml' at or above {here}"
     )
 
 

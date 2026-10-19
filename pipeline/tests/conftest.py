@@ -42,9 +42,17 @@ def good_manifest() -> Manifest:
     return Manifest(start="first-scene", style_anchor="first-scene", scenes=scenes)
 
 
+def make_repo_root(root: Path) -> RepoPaths:
+    """Create the two markers that identify a Dreamscapes checkout."""
+    (root / "content").mkdir(parents=True, exist_ok=True)
+    (root / "pipeline").mkdir(parents=True, exist_ok=True)
+    (root / "pipeline" / "pyproject.toml").write_text('[project]\nname = "dreamscapes-pipeline"\n')
+    return RepoPaths(root)
+
+
 def write_small_repo(root: Path) -> RepoPaths:
     """A repository with the three-scene manifest and solid-colour masters, no exports."""
-    paths = RepoPaths(root)
+    paths = make_repo_root(root)
     manifest = good_manifest()
     save_manifest(manifest, paths.scenes_yaml)
     paths.masters.mkdir(parents=True, exist_ok=True)
@@ -60,9 +68,7 @@ def small_repo(tmp_path: Path) -> RepoPaths:
 
 @pytest.fixture(scope="session")
 def _placeholder_source(tmp_path_factory: pytest.TempPathFactory) -> RepoPaths:
-    root = tmp_path_factory.mktemp("placeholders")
-    (root / "content").mkdir()
-    paths = RepoPaths(root)
+    paths = make_repo_root(tmp_path_factory.mktemp("placeholders"))
     run_placeholders(paths)
     return paths
 
