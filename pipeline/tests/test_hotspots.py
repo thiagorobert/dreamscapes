@@ -198,6 +198,18 @@ def test_image_relative_mask_is_just_scaled():
     assert same_points(polygon, [(0.1, 0.2), (0.5, 0.2), (0.5, 0.6)])
 
 
+def test_a_slender_outline_in_a_wide_box_stays_in_image_coordinates():
+    # The points span well under half of their box, which is normal for a thin object.
+    box = [200, 200, 800, 800]
+    mask = [[400, 300], [600, 300], [600, 700], [400, 700]]
+    assert detect_mask_frame(box, mask) == "image"
+    assert same_points(
+        gemini_mask_to_polygon(box, mask), [(0.4, 0.3), (0.6, 0.3), (0.6, 0.7), (0.4, 0.7)]
+    )
+    lighthouse = [[480, 150], [520, 150], [530, 900], [470, 900]]
+    assert detect_mask_frame([100, 100, 950, 900], lighthouse) == "image"
+
+
 def test_mask_frame_is_detected_from_where_the_points_fall():
     image_points = [[110, 210], [490, 220], [480, 590], [120, 580]]
     box_points = [[20, 30], [980, 10], [960, 990], [10, 970]]
@@ -214,6 +226,25 @@ def test_box_conversion_round_trip_and_swapped_corners():
     candidate = gemini_candidate(entry)
     assert candidate.bbox == pytest.approx((0.1, 0.2, 0.5, 0.6))
     assert geometry.area(candidate.polygon) == pytest.approx(0.16)  # no mask: the box itself
+
+
+L_SHAPE = [[100, 100], [500, 100], [500, 300], [300, 300], [300, 500], [100, 500]]  # 12%
+
+
+@pytest.mark.parametrize(
+    "mask",
+    [
+        L_SHAPE[:3] + [[500, 300]] + L_SHAPE[3:],  # a vertex repeated
+        L_SHAPE + [[100, 100]],  # explicitly closed
+    ],
+    ids=["repeated vertex", "closing vertex"],
+)
+def test_repeated_vertices_do_not_trigger_the_hull(mask):
+    entry = parse_gemini_masks(json.dumps([{"box_2d": [100, 100, 500, 500], "mask": mask}]))[0]
+    candidate = gemini_candidate(entry)
+    assert len(candidate.polygon) == 6
+    assert geometry.area(candidate.polygon) == pytest.approx(0.12)
+    assert not geometry.point_in_polygon((0.4, 0.4), candidate.polygon)  # the notch stays open
 
 
 def test_crossing_gemini_outline_falls_back_to_its_hull():
@@ -525,18 +556,48 @@ def test_retry_uses_the_box_claude_suggests(scene_image):
     assert geometry.point_in_polygon((0.5, 0.5), result.polygon)
 
 
-def test_two_failures_mark_the_scene_for_manual_work(scene_image):
+FLAG_ONLY = {"verified", "verification", "needs_manual_hotspot"}
+
+
+def test_a_no_without_a_new_box_goes_straight_to_manual_work(scene_image):
+    # Without a suggestion the retry would send the very same request, so there is none.
     segmenter = FakeSegmenter([[cand(0.2, 0.2, 0.3, 0.3)]])
     verifier = FakeVerifier([Verdict(matches=False, reason="Wrong object.")])
     result = extract_hotspot(
         scene_image, "hoop", segmenter, verifier, image_size=(W, H), hint_box=(0.4, 0.4, 0.6, 0.6)
     )
-    assert not result.verified and len(result.attempts) == 2
-    assert [call[2] for call in segmenter.calls] == [(0.4, 0.4, 0.6, 0.6)] * 2  # no suggestion
+    assert not result.verified and len(result.attempts) == 1
+    assert [call[2] for call in segmenter.calls] == [(0.4, 0.4, 0.6, 0.6)]
     updates = bridge_updates(result, "gemini")
+    assert set(updates) == FLAG_ONLY  # a rejected outline never replaces the hotspot
     assert updates["needs_manual_hotspot"] is True and updates["verified"] is False
+    assert updates["verification"].startswith("Not verified after 1 attempt. Attempt 1:")
+
+
+def test_a_suggestion_equal_to_the_current_hint_is_not_retried(scene_image):
+    suggestion = (0.45, 0.4, 0.6, 0.6)
+    hint = expand_box(suggestion, 0.15)  # what a retry with this suggestion would send
+    segmenter = FakeSegmenter([[cand(0.2, 0.2, 0.3, 0.3)]])
+    verifier = FakeVerifier([Verdict(matches=False, reason="No.", suggested_box=suggestion)])
+    result = extract_hotspot(
+        scene_image, "hoop", segmenter, verifier, image_size=(W, H), hint_box=hint
+    )
+    assert len(result.attempts) == 1 and len(segmenter.calls) == 1
+
+
+def test_two_failures_flag_the_scene_without_touching_its_hotspot(scene_image):
+    court = cand(0.2, 0.3, 0.8, 0.82, "basketball court")  # 31% of the frame
+    segmenter = FakeSegmenter([[court]])
+    verifier = FakeVerifier(
+        [Verdict(matches=False, reason="The whole court.", suggested_box=(0.5, 0.3, 0.6, 0.5))]
+    )
+    result = extract_hotspot(scene_image, "hoop", segmenter, verifier, image_size=(W, H))
+    assert not result.verified and len(result.attempts) == 2
+    assert result.polygon is None and result.final is None
+    assert all(a.polygon for a in result.attempts)  # still kept for the review overlays
+    updates = bridge_updates(result, "gemini")
+    assert set(updates) == FLAG_ONLY
     assert updates["verification"].startswith("Not verified after 2 attempts.")
-    assert "polygon" in updates  # the last outline is kept as a starting point
 
 
 def test_nothing_found_keeps_the_existing_polygon(scene_image):

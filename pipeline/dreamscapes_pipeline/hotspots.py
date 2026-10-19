@@ -11,12 +11,16 @@ For one scene (plan section 6.2):
    vertices.
 4. Ask Claude whether the tinted region is exactly the object and nothing else
    (`verify_with_claude`). On "no", segment once more with the bounding box Claude suggests
-   written into the prompt; on a second "no", mark the scene ``needs_manual_hotspot`` so a person
-   draws it with tools/annotate/index.html.
-5. Write the polygon, its derived geometry and the verdict back to content/scenes.yaml (only the
-   hotspot fields; comments and everything else are kept), save the overlay to
-   assets/review/<scene>/hotspot.png and the mask to assets/masks/<scene>.png, and report the
-   hotspot rules that `dsp validate` enforces.
+   written into the prompt (only when there is a new box: otherwise the retry would repeat the
+   same request); on a second "no", mark the scene ``needs_manual_hotspot`` so a person draws it
+   with tools/annotate/index.html.
+5. When verified, write the polygon, its derived geometry and the verdict back to
+   content/scenes.yaml (only the hotspot fields; comments and everything else are kept) and the
+   mask to assets/masks/<scene>.png. When not, write only ``verified: false``, the reasons and
+   ``needs_manual_hotspot: true``: the existing polygon, its source and its mask stay as they
+   were. Either way, save review overlays under assets/review/<scene>/ (hotspot.png is the
+   hotspot the manifest now holds, hotspot-<n>.png each attempt) and report the hotspot rules
+   that `dsp validate` enforces.
 
 What was checked against the live documentation on 2026-10-19
 ---------------------------------------------------------------
@@ -410,25 +414,21 @@ def box_to_1000(box: BBox) -> list[int]:
 
 
 def detect_mask_frame(box_2d: Sequence[float], mask: Sequence[Sequence[float]]) -> MaskFrame:
-    """Whether mask points are 0-1000 across the box or across the whole image.
+    """Whether mask points are 0-1000 across the whole image or across the box.
 
-    Read as whole-image coordinates, a box-relative outline spreads over most of 0-1000 wherever
-    the box is, so it does not fit inside the box. An image-relative outline sits inside its box
-    and fills most of it. The two readings only coincide when the box covers nearly the whole
-    image, where either answer gives the same polygon.
+    The smoke test showed Gemini sends whole-image points, so that is the answer unless the
+    points cannot be whole-image ones: an outline of the object has to lie inside the object's
+    own box. Points that fall clearly outside it can only make sense as box-relative. How much
+    of the box an outline spans says nothing either way (a slender lighthouse in a wide box
+    spans a small part of it), so it is not used.
     """
     x0, y0, x1, y1 = (v * 1000 for v in _box_from_1000(box_2d))
-    xs = [p[0] for p in mask]
-    ys = [p[1] for p in mask]
-    tolerance = 20  # 2% of the image
-    inside = (
-        min(xs) >= x0 - tolerance
-        and max(xs) <= x1 + tolerance
-        and min(ys) >= y0 - tolerance
-        and max(ys) <= y1 + tolerance
+    tolerance = 20  # 2% of the image, for outlines that brush the box edge
+    inside = all(
+        x0 - tolerance <= px <= x1 + tolerance and y0 - tolerance <= py <= y1 + tolerance
+        for px, py in mask
     )
-    fills = (max(xs) - min(xs)) >= 0.5 * (x1 - x0) and (max(ys) - min(ys)) >= 0.5 * (y1 - y0)
-    return "image" if inside and fills else "box"
+    return "image" if inside else "box"
 
 
 def gemini_mask_to_polygon(
@@ -458,7 +458,7 @@ def gemini_candidate(entry: _LenientMask, frame: MaskFrame | Literal["auto"] = "
     """A candidate from one response entry; a missing mask falls back to the box itself."""
     bbox = _box_from_1000(entry.box_2d)
     if len(entry.mask) >= 3:
-        polygon = gemini_mask_to_polygon(entry.box_2d, entry.mask, frame)
+        polygon = dedupe_vertices(gemini_mask_to_polygon(entry.box_2d, entry.mask, frame))
         if geometry.simplicity_problem(polygon) is not None:
             # A crossing outline has its vertices in the wrong order, and filling it leaves
             # holes inside the object (seen in the smoke test: a C shape that missed the body
@@ -471,6 +471,23 @@ def gemini_candidate(entry: _LenientMask, frame: MaskFrame | Literal["auto"] = "
     if geometry.area(polygon) <= 0:
         return None
     return Candidate(polygon=polygon, bbox=bbox, label=entry.label)
+
+
+def dedupe_vertices(polygon: Sequence[Sequence[float]]) -> Polygon:
+    """Drop consecutive repeats and a closing vertex equal to the first.
+
+    Outlines often repeat a point or close themselves explicitly. Neither makes the shape cross
+    itself, but both fail the simplicity check, which would otherwise trigger the convex-hull
+    fallback and fill in concave parts of the object.
+    """
+    out: Polygon = []
+    for x, y in polygon:
+        point = (float(x), float(y))
+        if not out or out[-1] != point:
+            out.append(point)
+    while len(out) > 1 and out[0] == out[-1]:
+        out.pop()
+    return out
 
 
 def convex_hull(polygon: Sequence[Sequence[float]]) -> Polygon:
@@ -1214,22 +1231,21 @@ class HotspotResult:
 
     @property
     def final(self) -> Attempt | None:
-        """The attempt whose polygon is kept: the verified one, else the last with a polygon."""
-        if self.verified:
-            return self.attempts[-1]
-        with_polygon = [a for a in self.attempts if a.polygon]
-        return with_polygon[-1] if with_polygon else None
+        """The verified attempt, the only one whose outline may replace the scene's hotspot."""
+        return self.attempts[-1] if self.verified else None
 
     @property
     def polygon(self) -> Polygon | None:
+        """The verified outline, or None: a rejected outline must never reach the manifest."""
         final = self.final
         return final.polygon if final else None
 
     def verification_text(self) -> str:
         if self.verified:
             return self.attempts[-1].verdict.reason
+        count = len(self.attempts)
         reasons = " ".join(f"Attempt {a.number}: {a.verdict.reason}" for a in self.attempts)
-        return f"Not verified after {len(self.attempts)} attempts. {reasons}"
+        return f"Not verified after {count} attempt{'s' if count != 1 else ''}. {reasons}"
 
 
 def extract_hotspot(
@@ -1244,7 +1260,11 @@ def extract_hotspot(
     spend: Spend | None = None,
     echo: Echo = lambda _: None,
 ) -> HotspotResult:
-    """Segment, choose, clean and verify; on a "no", retry once with Claude's suggested box."""
+    """Segment, choose, clean and verify; on a "no", retry once with Claude's suggested box.
+
+    The retry only happens when it would send something new: without a fresh suggestion the
+    second request would be identical to the first, so the scene goes straight to manual work.
+    """
     spend = spend if spend is not None else Spend(cap_usd=float("inf"))
     result = HotspotResult()
     hint = hint_box
@@ -1296,10 +1316,12 @@ def extract_hotspot(
         )
         if verdict.matches:
             break
-        if verdict.suggested_box is not None:
-            hint = expand_box(verdict.suggested_box, SUGGESTION_MARGIN)
-        else:
-            hint = hint_box
+        if verdict.suggested_box is None:
+            break
+        next_hint = expand_box(verdict.suggested_box, SUGGESTION_MARGIN)
+        if next_hint == hint:
+            break
+        hint = next_hint
     return result
 
 
@@ -1321,11 +1343,16 @@ def _indent(text: str, spaces: int) -> str:
 
 
 def bridge_updates(result: HotspotResult, source: HotspotSource) -> dict[str, Any]:
-    """The hotspot fields of ``bridge`` after a run; None removes a field."""
+    """The hotspot fields of ``bridge`` after a run; None removes a field.
+
+    Only a verified outline replaces the polygon and its derived fields. After a failure the
+    existing hotspot (perhaps verified earlier, perhaps drawn by hand) stays exactly as it was,
+    together with its ``source`` and mask; the scene is only flagged for manual work. The
+    rejected outlines are kept for review as assets/review/<scene>/hotspot-<n>.png.
+    """
     final = result.final
     text = result.verification_text()
     if final is None or not final.polygon:
-        # Nothing usable was found: keep whatever polygon is there and flag the scene.
         return {"verified": False, "verification": text, "needs_manual_hotspot": True}
     polygon = [
         (round(float(x), POLYGON_DECIMALS), round(float(y), POLYGON_DECIMALS))
@@ -1337,10 +1364,10 @@ def bridge_updates(result: HotspotResult, source: HotspotSource) -> dict[str, An
     return {
         "polygon": [[x, y] for x, y in polygon],
         "source": source,
-        "verified": result.verified,
+        "verified": True,
         "verification": text,
         "score": round(float(score), 4) if score is not None else None,
-        "needs_manual_hotspot": not result.verified,
+        "needs_manual_hotspot": False,
         "bbox": [round(v, DERIVED_DECIMALS) for v in (x0, y0, x1, y1)],
         "centroid": [round(cx, DERIVED_DECIMALS), round(cy, DERIVED_DECIMALS)],
         "area": round(geometry.area(polygon), DERIVED_DECIMALS),
@@ -1452,9 +1479,13 @@ def _process_scene(
     for attempt in result.attempts:
         if attempt.polygon:
             render_overlay(image, attempt.polygon).save(review / f"hotspot-{attempt.number}.png")
+    # hotspot.png always shows the hotspot the manifest holds after this run: the new outline
+    # when it was verified, otherwise the one that was kept. Rejected outlines are the
+    # hotspot-<n>.png files above.
     overlay = review / "hotspot.png"
-    if result.polygon:
-        render_overlay(image, result.polygon).save(overlay)
+    kept = result.polygon or (scene.bridge.polygon if len(scene.bridge.polygon) >= 3 else None)
+    if kept:
+        render_overlay(image, kept).save(overlay)
         echo(f"  wrote {_rel(paths, overlay)}")
     elif overlay.exists():
         overlay.unlink()  # never leave an overlay from an earlier run looking current
@@ -1510,12 +1541,17 @@ def run_hotspot_command(
     all_scenes: bool,
     box: Sequence[float] | None,
     dry_run: bool,
+    force: bool = False,
     echo: Echo = print,
     segmenter: SegmentationProvider | None = None,
     verifier: Verifier | None = None,
 ) -> int:
     """`dsp hotspot`. Returns the exit code: 0 when every scene verified cleanly, 1 otherwise,
     2 for invalid options. ``segmenter`` and ``verifier`` replace the real providers in tests.
+
+    With ``--all``, scenes that are already verified are skipped unless ``force`` is set, so a
+    re-run only pays for the scenes that still need work; hand-drawn hotspots are always
+    skipped. A scene named with ``--scene`` is always processed.
     """
     if bool(scene) == bool(all_scenes):
         echo("error: pass exactly one of --scene <id> or --all")
@@ -1556,12 +1592,20 @@ def run_hotspot_command(
         for item in manifest.scenes:
             if item.bridge.source == "manual":
                 echo(f"{item.id}: kept its hand-drawn hotspot (use --scene {item.id} to redo it)")
+            elif item.bridge.verified and not force:
+                echo(
+                    f"{item.id}: already verified, skipped (use --force, or --scene {item.id}, "
+                    "to redo it)"
+                )
             else:
                 targets.append(item)
 
     real = make_segmenter(name)
     if dry_run:
-        echo("dry run: nothing is sent and content/scenes.yaml is not changed")
+        echo(
+            "dry run: nothing is sent and content/scenes.yaml and assets/masks are not changed; "
+            "review files are still written to assets/review/ (git-ignored)"
+        )
         verifier = verifier or DryRunVerifier(echo)
     else:
         segmenter = segmenter or real

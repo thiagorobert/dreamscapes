@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 import yaml
@@ -47,7 +48,16 @@ def hoop() -> Candidate:
     return Candidate(polygon, geometry.bbox(polygon), "basketball hoop")
 
 
-def run(paths, *, scene="prison-yard", all_scenes=False, box=None, segmenter=None, verifier=None):
+def run(
+    paths,
+    *,
+    scene="prison-yard",
+    all_scenes=False,
+    box=None,
+    force=False,
+    segmenter=None,
+    verifier=None,
+):
     lines: list[str] = []
     code = run_hotspot_command(
         paths,
@@ -55,6 +65,7 @@ def run(paths, *, scene="prison-yard", all_scenes=False, box=None, segmenter=Non
         all_scenes=all_scenes,
         box=box,
         dry_run=False,
+        force=force,
         echo=lines.append,
         segmenter=segmenter or FakeSegmenter([[hoop()]]),
         verifier=verifier or FakeVerifier([Verdict(matches=True, reason="The hoop.")]),
@@ -205,16 +216,94 @@ def test_comments_in_the_manifest_survive(placeholder_repo):
     assert "comments were dropped" not in out
 
 
-def test_two_failures_flag_the_scene_and_exit_1(placeholder_repo):
-    verifier = FakeVerifier([Verdict(matches=False, reason="That is a fence.")])
-    code, out = run(placeholder_repo, verifier=verifier)
+def court() -> Candidate:
+    """A wrong answer: the whole basketball court, about 31% of the frame."""
+    polygon = [(0.2, 0.3), (0.8, 0.3), (0.8, 0.82), (0.2, 0.82)]
+    return Candidate(polygon, geometry.bbox(polygon), "basketball court")
+
+
+REJECT_TWICE = [
+    Verdict(matches=False, reason="That is the whole court.", suggested_box=(0.56, 0.3, 0.7, 0.5)),
+    Verdict(matches=False, reason="Still the whole court."),
+]
+
+
+def test_failed_run_flags_the_scene_and_leaves_its_hotspot_alone(placeholder_repo):
+    before = load_manifest(placeholder_repo.scenes_yaml).scene("prison-yard").bridge
+    mask_before = placeholder_repo.mask("prison-yard").read_bytes()
+    segmenter = FakeSegmenter([[court()]])
+    code, out = run(placeholder_repo, segmenter=segmenter, verifier=FakeVerifier(REJECT_TWICE))
     assert code == 1
     assert "needs a manual hotspot" in out
-    bridge = load_manifest(placeholder_repo.scenes_yaml).scene("prison-yard").bridge
-    assert bridge.needs_manual_hotspot and not bridge.verified
-    assert "That is a fence." in bridge.verification
-    warnings = [str(w) for w in validate_repo(placeholder_repo).warnings]
-    assert any("needing manual annotation" in w for w in warnings)
+    assert len(segmenter.calls) == 2
+    after = load_manifest(placeholder_repo.scenes_yaml).scene("prison-yard").bridge
+    assert after.needs_manual_hotspot and not after.verified
+    assert "That is the whole court." in after.verification
+    assert "Still the whole court." in after.verification
+    unchanged = ("polygon", "source", "score", "bbox", "centroid", "area", "object", "placement")
+    assert {k: getattr(after, k) for k in unchanged} == {k: getattr(before, k) for k in unchanged}
+    assert placeholder_repo.mask("prison-yard").read_bytes() == mask_before
+    review = placeholder_repo.review_dir("prison-yard")
+    assert (review / "hotspot-1.png").exists() and (review / "hotspot-2.png").exists()
+    result = validate_repo(placeholder_repo)
+    assert result.errors == []  # what CI runs still passes
+    assert any("needing manual annotation" in str(w) for w in result.warnings)
+
+
+def test_a_verified_hotspot_survives_a_failed_rerun(placeholder_repo):
+    code, out = run(placeholder_repo)  # first run: verified
+    assert code == 0, out
+    good = load_manifest(placeholder_repo.scenes_yaml).scene("prison-yard").bridge
+    assert good.verified and good.source == "gemini"
+    mask_good = placeholder_repo.mask("prison-yard").read_bytes()
+
+    code, out = run(
+        placeholder_repo,
+        segmenter=FakeSegmenter([[court()]]),
+        verifier=FakeVerifier(REJECT_TWICE),
+    )
+    assert code == 1
+    bad = load_manifest(placeholder_repo.scenes_yaml).scene("prison-yard").bridge
+    assert bad.polygon == good.polygon
+    assert (bad.source, bad.bbox, bad.centroid, bad.area) == (
+        good.source,
+        good.bbox,
+        good.centroid,
+        good.area,
+    )
+    assert not bad.verified and bad.needs_manual_hotspot
+    assert placeholder_repo.mask("prison-yard").read_bytes() == mask_good
+    assert validate_repo(placeholder_repo).errors == []
+
+
+def test_all_skips_verified_scenes_unless_forced(placeholder_repo):
+    assert run(placeholder_repo)[0] == 0  # prison-yard is now verified
+    segmenter = FakeSegmenter([[hoop()]])
+    code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
+    assert code == 0, out
+    assert "prison-yard: already verified, skipped" in out
+    assert len(segmenter.calls) == 9
+    assert "estimated spend: up to $0.00 for 9 scene(s)" in out
+
+    segmenter = FakeSegmenter([[hoop()]])
+    code, out = run(placeholder_repo, all_scenes=True, force=True, segmenter=segmenter)
+    assert code == 0, out
+    assert "already verified" not in out
+    assert len(segmenter.calls) == 10
+
+    segmenter = FakeSegmenter([[hoop()]])
+    assert run(placeholder_repo, segmenter=segmenter)[0] == 0  # named: always redone
+    assert len(segmenter.calls) == 1
+
+
+def test_dry_run_help_mentions_the_review_files():
+    result = runner.invoke(app, ["hotspot", "--help"], env={"COLUMNS": "200"})
+    assert result.exit_code == 0
+    # Rich styling (forced on under GitHub Actions) adds escape codes and panel borders.
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output).replace("│", " ")
+    text = " ".join(plain.split())
+    assert "review files are still written to assets/review/" in text
+    assert "--force" in text
 
 
 def test_all_keeps_hand_drawn_hotspots(placeholder_repo):

@@ -208,13 +208,31 @@ def hotspot(
             help="Hint box in normalised coordinates to steer segmentation.",
         ),
     ] = None,
-    dry_run: DryRunOpt = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="With --all, also redo scenes that are already verified."),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Print the requests that would be sent and send nothing. content/scenes.yaml "
+            "and the masks are left alone; review files are still written to assets/review/ "
+            "(git-ignored).",
+        ),
+    ] = False,
 ) -> None:
     """Segment the bridge object into a hotspot polygon, verify it and write it to the YAML."""
     from .hotspots import run_hotspot_command
 
     code = run_hotspot_command(
-        _repo(), scene=scene, all_scenes=all_, box=box, dry_run=dry_run, echo=typer.echo
+        _repo(),
+        scene=scene,
+        all_scenes=all_,
+        box=box,
+        dry_run=dry_run,
+        force=force,
+        echo=typer.echo,
     )
     if code:
         raise typer.Exit(code)
