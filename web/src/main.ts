@@ -71,6 +71,7 @@ class Dreamscapes {
     private readonly dreams: Dreams,
   ) {
     this.scene = dreams.start;
+    root.dataset.busy = 'false';
     root.replaceChildren();
     this.stage = new Stage(root);
     root.append(element('h1', 'chrome wordmark', 'dreamscapes'));
