@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from . import genlog
-from .imaging import as_png, sha256_bytes
+from .imaging import as_png, atomic_write, sha256_bytes
 from .layout import RepoPaths
 from .manifest import Manifest, Scene
 from .placeholders import is_placeholder_image
@@ -198,6 +198,9 @@ class GenerationPlan:
     skipped: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
     """Reasons a real run must not start; a dry run prints them as notes."""
+    waiting_for_anchor: list[str] = field(default_factory=list)
+    """Scenes left out because the anchor, generated in this same run, has no real master yet."""
+    anchor_problem: str | None = None
 
     @property
     def estimate(self) -> float:
@@ -241,12 +244,20 @@ def plan_generation(
     plan = GenerationPlan()
     rows = rows if rows is not None else genlog.read_rows(paths.generation_log)
     by_id = manifest.by_id()
+    # When the anchor scene is part of this run (as with --all on a fresh checkout), scenes that
+    # need its master simply wait: the anchor's candidates are generated now and the rest after
+    # the anchor has been selected. Asked for on their own, those scenes are an error instead.
+    anchor_in_run = manifest.style_anchor in scene_ids
     for scene_id in scene_ids:
         scene = by_id[scene_id]
         wants_reference = not no_reference and scene_id != manifest.style_anchor
         references: list[ReferenceImage] = []
         if wants_reference:
             ref, problem = anchor_reference(paths, manifest, require_real=not dry_run)
+            if problem and anchor_in_run:
+                plan.waiting_for_anchor.append(scene_id)
+                plan.anchor_problem = problem
+                continue
             if problem:
                 plan.problems.append(f"{scene_id}: {problem}")
             if ref is not None:
@@ -344,6 +355,28 @@ def execute_plan(
             "cost_estimate_usd": item.estimate,
         }
         started = time.monotonic()
+
+        def fail(
+            error: ProviderError,
+            row: dict[str, Any] = row,
+            item: PlannedImage = item,
+            started: float = started,
+        ) -> None:
+            """Log the failed call, charge whatever it cost, and give up on its scene."""
+            row.update(
+                status="error",
+                error=str(error),
+                cost_usd=error.cost_usd,
+                duration_s=round(time.monotonic() - started, 2),
+            )
+            genlog.append_row(paths.generation_log, row)
+            if error.cost_usd:
+                guard.record(f"{item.scene_id} cand-{item.candidate} (failed)", error.cost_usd)
+                outcome.spent += error.cost_usd
+            echo(f"  failed: {error}")
+            outcome.failed.append(f"{item.scene_id} cand-{item.candidate}")
+            failed_scenes.add(item.scene_id)
+
         echo(f"generating {what} with {provider.name} {provider.model} ...")
         try:
             result = with_retries(
@@ -357,22 +390,34 @@ def execute_plan(
         except MissingCredentials:
             raise  # nothing was sent, so there is nothing to log; the run stops
         except ProviderError as error:
-            row.update(
-                status="error",
-                error=str(error),
-                cost_usd=None,
-                duration_s=round(time.monotonic() - started, 2),
-            )
-            genlog.append_row(paths.generation_log, row)
-            echo(f"  failed: {error}")
-            outcome.failed.append(what)
-            failed_scenes.add(item.scene_id)
+            fail(error)
             continue
 
-        png, dims = as_png(result.image)
-        item.out_path.parent.mkdir(parents=True, exist_ok=True)
-        item.out_path.write_bytes(png)
+        # From here on the call was paid for, so every outcome is logged and charged.
         cost = result.cost_usd if result.cost_usd is not None else result.cost_estimate_usd
+        row.update(
+            model=result.model,
+            request_id=result.request_id,
+            response_id=result.response_id,
+            usage=result.usage,
+        )
+        try:
+            png, dims = as_png(result.image)
+        except (OSError, ValueError) as error:  # Pillow's "cannot identify image" is an OSError
+            fail(
+                ProviderError(
+                    f"{provider.name} returned {len(result.image)} bytes that are not a readable "
+                    f"image ({error})",
+                    retryable=False,
+                    cost_usd=cost,
+                )
+            )
+            continue
+        try:
+            atomic_write(item.out_path, png)
+        except OSError as error:
+            fail(ProviderError(f"could not write {item.out_path}: {error}", cost_usd=cost))
+            continue
         row.update(
             model=result.model,
             seed=result.seed,
@@ -450,6 +495,13 @@ def run_generate(
         echo(("note: a real run would refuse: " if dry_run else "error: ") + problem)
     if plan.problems and not dry_run:
         return 1
+    if plan.waiting_for_anchor:
+        echo(
+            f"skipped {len(plan.waiting_for_anchor)} scene(s) until the style anchor is ready: "
+            f"{', '.join(plan.waiting_for_anchor)}. Reason: {plan.anchor_problem}. Generating "
+            f"'{manifest.style_anchor}' only; run `dsp select --scene {manifest.style_anchor}`, "
+            "then generate again for the rest."
+        )
     if not plan.items:
         echo("nothing to generate")
         return 0
@@ -477,4 +529,5 @@ def run_generate(
         f"generated {len(outcome.written)} image(s), {len(outcome.failed)} failed; "
         f"spent about ${outcome.spent:.2f}"
     )
+    echo(genlog.spend_summary(paths.generation_log))
     return 1 if outcome.failed else 0

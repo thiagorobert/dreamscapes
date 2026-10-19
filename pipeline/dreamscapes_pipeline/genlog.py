@@ -100,3 +100,15 @@ def total_spend(rows: list[dict[str, Any]]) -> float:
             cost = row.get("cost_estimate_usd")
         total += float(cost or 0.0)
     return total
+
+
+def spend_summary(path: Path) -> str:
+    """One line with everything the log says has been spent, printed after paid runs."""
+    try:
+        rows = read_rows(path)
+    except ValueError as error:
+        return f"could not total the generation log: {error}"
+    return (
+        f"spend recorded in the generation log so far: ${total_spend(rows):.2f} "
+        f"over {len(rows)} call(s)"
+    )

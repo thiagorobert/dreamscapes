@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
+import uuid
 from pathlib import Path
 
 from PIL import Image
@@ -19,12 +21,27 @@ def sha256_file(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
 
 
+def atomic_write(path: Path, data: bytes) -> None:
+    """Write through a temporary file in the same folder, then rename it into place.
+
+    A crash or a full disk mid-write leaves either the old file or the new one, never a
+    truncated image that a later run would mistake for a finished candidate or master. The
+    temporary name starts with a dot so no file pattern in the pipeline ever matches it.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+    try:
+        temporary.write_bytes(data)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def write_if_changed(path: Path, data: bytes) -> bool:
-    """Write only when the bytes differ, so re-runs leave files (and git) untouched."""
+    """Write (atomically) only when the bytes differ, so re-runs leave files and git alone."""
     if path.exists() and path.read_bytes() == data:
         return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+    atomic_write(path, data)
     return True
 
 
@@ -50,20 +67,37 @@ def image_size(path: Path) -> tuple[int, int]:
         return image.size
 
 
-def fit_master(image: Image.Image) -> Image.Image:
-    """Centre-crop to 16:9 and resize to the 2048x1152 master size."""
-    image = image.convert("RGB")
-    w, h = image.size
+def master_crop(size: tuple[int, int]) -> tuple[int, int, int, int]:
+    """The centred 16:9 box (left, top, right, bottom) that becomes the master."""
+    w, h = size
     target = MASTER_WIDTH / MASTER_HEIGHT
-    if abs(w / h - target) > 1e-3:
-        if w / h > target:
-            new_w = round(h * target)
-            left = (w - new_w) // 2
-            image = image.crop((left, 0, left + new_w, h))
-        else:
-            new_h = round(w / target)
-            top = (h - new_h) // 2
-            image = image.crop((0, top, w, top + new_h))
+    if abs(w / h - target) <= 1e-3:
+        return (0, 0, w, h)
+    if w / h > target:
+        new_w = round(h * target)
+        left = (w - new_w) // 2
+        return (left, 0, left + new_w, h)
+    new_h = round(w / target)
+    top = (h - new_h) // 2
+    return (0, top, w, top + new_h)
+
+
+def upscale_needed(size: tuple[int, int]) -> bool:
+    """True when fitting an image of this size to the master would enlarge it (and soften it)."""
+    left, top, right, bottom = master_crop(size)
+    return right - left < MASTER_WIDTH or bottom - top < MASTER_HEIGHT
+
+
+def fit_master(image: Image.Image) -> Image.Image:
+    """Centre-crop to 16:9 and resize to the 2048x1152 master size.
+
+    Smaller images are enlarged; `dsp select` refuses that unless asked (see
+    `upscale_needed`), because an enlarged master looks soft on large screens.
+    """
+    image = image.convert("RGB")
+    box = master_crop(image.size)
+    if box != (0, 0, *image.size):
+        image = image.crop(box)
     if image.size != (MASTER_WIDTH, MASTER_HEIGHT):
         image = image.resize((MASTER_WIDTH, MASTER_HEIGHT), Image.Resampling.LANCZOS)
     return image

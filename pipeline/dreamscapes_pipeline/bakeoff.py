@@ -89,11 +89,11 @@ def run_bakeoff(
     try:
         style = load_style_block(paths, allow_draft=dry_run)
         loaded = load_grade_params(paths)
-    except (StyleBlockError, GradeConfigError) as error:
+        rows = genlog.read_rows(paths.generation_log)
+    except (StyleBlockError, GradeConfigError, ValueError) as error:
         echo(f"error: {error}")
         return 1
     prompt = build_prompt(style.text, scene, with_reference=False)
-    rows = genlog.read_rows(paths.generation_log)
     judge = judge or make_judge(paths.root)
     guard = guard or SpendGuard.from_env()
 

@@ -246,10 +246,17 @@ def test_dry_run_prints_requests_and_sends_nothing(placeholder_repo):
     assert not placeholder_repo.candidates.exists()
     assert not placeholder_repo.generation_log.exists()
     text = "\n".join(lines)
-    assert "draft" in text and "a real run would refuse" in text
-    assert "request 4 of 4" in text and "dry run: nothing was sent" in text
+    assert "draft" in text
+    assert "skipped 1 scene(s) until the style anchor is ready: prison-yard" in text
+    assert "request 2 of 2" in text and "dry run: nothing was sent" in text
     first_json = text[text.index("{") : text.index("\n}") + 2]
     assert json.loads(first_json)["model"] == "fake-image-1"
+
+    # A scene that needs the anchor, asked for on its own, still shows the reference request.
+    lines.clear()
+    assert _run(placeholder_repo, ["prison-yard"], provider, lines, count=1, dry_run=True) == 0
+    assert any("a real run would refuse" in line for line in lines)
+    assert provider.attempts == 0
 
 
 def test_spend_guard_stops_before_any_call(small_repo):
@@ -325,3 +332,93 @@ def test_unsupported_size_fails_before_sending(small_repo):
     lines: list[str] = []
     assert _run(small_repo, ["first-scene"], GeminiImageProvider(), lines, size="3K") == 1
     assert any("unsupported size" in line for line in lines)
+
+
+# --------------------------------------------------------------------------------------------
+# Paid calls that go wrong after the provider answered
+# --------------------------------------------------------------------------------------------
+
+
+def test_an_undecodable_image_is_logged_and_charged(small_repo):
+    write_style(small_repo)
+
+    class Garbage(FakeImageProvider):
+        def generate(self, *args, **kwargs):
+            result = super().generate(*args, **kwargs)
+            return GenerationResult(
+                **{**result.__dict__, "image": b"not an image", "cost_usd": 0.04}
+            )
+
+    guard = SpendGuard(limit=15)
+    lines: list[str] = []
+    assert _run(small_repo, ["first-scene"], Garbage(), lines, count=2, guard=guard) == 1
+    rows = genlog.read_rows(small_repo.generation_log)
+    assert len(rows) == 1, "the scene stops after its first failure"
+    row = rows[0]
+    assert row["status"] == "error" and "not a readable image" in row["error"]
+    assert row["cost_usd"] == 0.04 and row["response_id"] == "resp-1"
+    assert guard.spent == pytest.approx(0.04)
+    assert existing_candidates(small_repo, "first-scene") == []
+    folder = small_repo.candidate_dir("first-scene")
+    assert not folder.exists() or list(folder.iterdir()) == []
+
+
+def test_a_billed_provider_failure_is_charged(small_repo):
+    write_style(small_repo)
+    blocked = ProviderError("blocked by safety", retryable=False, cost_usd=0.03)
+    provider = FakeImageProvider(failures=[blocked])
+    guard = SpendGuard(limit=15)
+    assert _run(small_repo, ["first-scene"], provider, count=1, guard=guard) == 1
+    row = genlog.read_rows(small_repo.generation_log)[0]
+    assert row["status"] == "error" and row["cost_usd"] == 0.03
+    assert guard.spent == pytest.approx(0.03)
+
+
+def test_candidates_are_written_atomically(small_repo, monkeypatch):
+    from dreamscapes_pipeline import imaging
+
+    write_style(small_repo)
+    provider = FakeImageProvider()
+    _run(small_repo, ["first-scene"], provider, count=1)
+    folder = small_repo.candidate_dir("first-scene")
+    original = (folder / "cand-1.png").read_bytes()
+    assert sorted(p.name for p in folder.iterdir()) == ["cand-1.png"]
+
+    def full_disk(src, dst):
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(imaging.os, "replace", full_disk)
+    guard = SpendGuard(limit=15)
+    lines: list[str] = []
+    code = _run(small_repo, ["first-scene"], provider, lines, count=1, force=True, guard=guard)
+    assert code == 1
+    assert (folder / "cand-1.png").read_bytes() == original, "the old file survives intact"
+    assert sorted(p.name for p in folder.iterdir()) == ["cand-1.png"], "no temporary left behind"
+    row = genlog.read_rows(small_repo.generation_log)[-1]
+    assert row["status"] == "error" and "could not write" in row["error"]
+    assert row["cost_usd"] == 0.01 and guard.spent == pytest.approx(0.01)
+
+
+def test_atomic_write_replaces_in_place(tmp_path):
+    from dreamscapes_pipeline.imaging import atomic_write
+
+    target = tmp_path / "deep" / "file.png"
+    atomic_write(target, b"one")
+    atomic_write(target, b"two")
+    assert target.read_bytes() == b"two"
+    assert [p.name for p in target.parent.iterdir()] == ["file.png"]
+
+
+def test_all_on_a_fresh_checkout_generates_the_anchor_and_waits_for_the_rest(placeholder_repo):
+    write_style(placeholder_repo)
+    provider = FakeImageProvider()
+    ids = [s.id for s in load_manifest(placeholder_repo.scenes_yaml).scenes]
+    lines: list[str] = []
+    assert _run(placeholder_repo, ids, provider, lines, count=1) == 0
+    assert len(provider.calls) == 1 and provider.calls[0].references == []
+    assert [n for n, _ in existing_candidates(placeholder_repo, "cliff-cottage")] == [1]
+    assert existing_candidates(placeholder_repo, "prison-yard") == []
+    text = "\n".join(lines)
+    assert "skipped 9 scene(s) until the style anchor is ready" in text
+    assert "dsp select --scene cliff-cottage" in text
+    assert "spend recorded in the generation log so far: $0.01 over 1 call(s)" in text
