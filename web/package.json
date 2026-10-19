@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json",
     "test": "vitest run",
     "e2e": "playwright test",
+    "walk": "node scripts/walk-live.ts",
     "format": "prettier --write ."
   },
   "devDependencies": {
