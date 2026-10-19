@@ -18,6 +18,15 @@ block shows up as drift between scenes).
 Score rows add ``prompt`` (system and text parts), ``parameters``, ``images`` (label, path and
 SHA-256 of every image shown), ``request_id``, ``response_id``, ``served_model`` (differs from
 ``model`` when a server-side fallback answered) and ``usage``.
+
+Morph rows (``kind: morph``, written by `dsp morph`) come in two purposes. ``morph`` is a paid
+Veo call: ``scene`` and ``next_scene`` name the edge, plus ``prompt``, ``parameters``,
+``references`` (the first and last frames with their SHA-256), ``seed`` (always null),
+``style_block_sha256``, ``response_id`` (the operation name), ``polls``, the raw download
+(``raw_path``, ``raw_sha256``, ``raw_bytes``, ``raw_info``) and the encoded clip
+(``output_path``, ``output_sha256``, ``output_bytes``, ``output_info``), or
+``postprocess_error`` when ffmpeg failed after the paid call. ``reencode`` rows cost nothing:
+they record a clip rebuilt from an earlier download, pointing at that call with ``source_row``.
 """
 
 from __future__ import annotations

@@ -1,5 +1,6 @@
-// The morph-clip transition. No real clips exist yet, so each test rewrites scenes.json in flight
-// to give the start scene's edge a video transition.
+// The morph-clip transition. Most tests rewrite scenes.json in flight to give the start scene's
+// edge a fixture clip, so they control exactly how the clip loads; one plays the real clip the
+// committed manifest names for that edge.
 //
 // fixtures/morph.mp4 is one second of H.264 at 320x180, a crossfade between the first two
 // placeholder scenes, made with:
@@ -123,6 +124,39 @@ test('a playable clip plays over the stage, then the next scene shows', async ({
   await expect(page.locator('.scene-layer')).toHaveCount(1);
   await expect(page.locator('#app')).toHaveAttribute('data-scene', start.next);
   await expect(page.locator('.depth')).toHaveText('dream 2');
+});
+
+test("the start scene's real clip plays from the committed manifest", async ({
+  page,
+  hasTouch,
+}) => {
+  const clip = start.transition.type === 'video' ? start.transition.video : null;
+  test.skip(clip === null, 'the start scene has no morph clip in scenes.json');
+  // An eight-second clip, plus buffering and the fades.
+  test.setTimeout(60_000);
+  await open(page);
+  await expect.poll(() => bufferedClipState(page), { timeout: 20_000 }).toBeGreaterThanOrEqual(3);
+
+  await press(page, hasTouch, await hotspotCentre(page));
+  await expect(page.locator('.morph video')).toHaveCount(1);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const video = document.querySelector<HTMLVideoElement>('.morph video');
+        return video !== null && !video.paused && video.currentTime > 0 && video.videoWidth > 0;
+      }),
+    )
+    .toBe(true);
+  const playing = await page.evaluate(
+    () => document.querySelector<HTMLVideoElement>('.morph video')?.currentSrc ?? '',
+  );
+  expect(playing).toContain(clip ?? 'no clip');
+
+  await expect(page.locator('#app')).toHaveAttribute('data-busy', 'false', { timeout: 30_000 });
+  await expect(page).toHaveURL(hashPattern(start.next));
+  await expect(page.locator('#app')).toHaveAttribute('data-transition', 'video');
+  await expect(page.locator('.morph')).toHaveCount(0);
+  await expect(page.locator('#app')).toHaveAttribute('data-scene', start.next);
 });
 
 test('a clip that stalls mid-play is cut short and the next scene shows', async ({

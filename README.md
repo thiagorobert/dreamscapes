@@ -21,7 +21,8 @@ assets/
   candidates/     generated candidates (git-ignored)
   review/         contact sheets and overlays (git-ignored)
 web/              the site: Vite + strict TypeScript, managed with pnpm
-  public/         scenes.json and the exported images under dreams/<scene>/ (generated)
+  public/         scenes.json, the exported images under dreams/<scene>/ and the morph
+                  clips under morphs/ (generated)
 schema/           scenes.schema.json, exported from the pipeline's manifest models
 tools/annotate/   manual hotspot editor
 docs/plans/       the plan
@@ -78,14 +79,13 @@ uv run dsp --help
 | `dsp hotspot --scene <id> \| --all [--force] [--box x0 y0 x1 y1] [--dry-run]` | Segments the bridge object into a hotspot polygon, has Claude verify it, and writes it to `content/scenes.yaml`. `--dry-run` needs no keys. | yes |
 | `dsp export [--check]` | Writes the AVIF/WebP variants, blurred previews and `web/public/scenes.json` from the graded masters, then verifies every file against its hash; `--check` only reports what would change. | no |
 | `dsp review` | Rebuilds every contact sheet and `assets/review/index.html`, which shows all graded masters side by side. | no |
-| `dsp morph --edge <a> <b> \| --all` | Renders morph clips between scenes. | yes |
+| `dsp morph --edge <a> <b> \| --all [--force] [--reencode] [--resolution 1080p] [--duration 8] [--model id] [--dry-run]` | Renders a Veo clip from scene A's graded master to scene B's (B must be A's `next`), strips the audio and re-encodes it with ffmpeg to `web/public/morphs/<a>__<b>.<hash>.mp4`, points A's transition at it and re-exports `scenes.json`. Skips edges whose clip is in place unless `--force`; `--reencode` rebuilds clips from the saved downloads without a new call. | yes |
 | `dsp bakeoff [--candidates 4] [--force] [--quality high] [--dry-run]` | Generates the first scene with Gemini and OpenAI, grades every image, has Claude score them blind and writes `assets/review/bakeoff.html`. | yes |
 
 Commands that call a paid API print their estimated spend first and refuse to go past
 `DSP_MAX_SPEND_USD` (15 US dollars when unset or empty) in one run; `--dry-run` prints the exact
 requests without sending anything. Rate limits and server errors are retried with backoff.
-`morph` is not implemented yet; it exits with status 2. See section 10 of the
-plan for every option.
+See section 10 of the plan for every option.
 
 ### Hotspots
 
@@ -108,6 +108,26 @@ that are already verified (add `--force` to redo them) and hand-drawn hotspots
 `DSP_SEGMENTATION_PROVIDER=sam3` switches to SAM 3 on fal (needs
 `uv sync --extra sam3` and `FAL_KEY`). Each run prints its spend estimate first and refuses to
 go past `DSP_MAX_SPEND_USD` (default 15); a scene costs about $0.03, about $0.06 with the retry.
+
+### Morph clips
+
+`uv run dsp morph --all` gives every edge of the loop a pre-rendered transition: Veo 3.1 Fast
+(`veo-3.1-fast-generate-preview`) animates from the outgoing scene's graded master (first
+frame) to the incoming one's (last frame), at 16:9, 1080p and 8 seconds, with the style block
+plus a short "drift toward the bridge object and dissolve into the next scene" prompt. It costs
+$0.12 per second of video, $0.96 per clip. Veo always adds a soundtrack, so ffmpeg (needed on
+the PATH: `brew install ffmpeg`) drops it and re-encodes the video as H.264 (CRF 23, yuv420p,
+`+faststart`); a clip that is over 5 MB at 1080p is scaled to 720p before the quality is
+lowered. The raw download is kept locally in `assets/candidates/morphs/`, so a clip whose
+post-processing failed is finished on the next run without paying again.
+
+Every clip needs a look before it ships: Veo can add motion, people or text that break the
+mood. `assets/review/morphs/index.html` shows, per edge, the two masters with the clip's first,
+middle and last frames between them, a contact sheet of eight frames, the clip itself, and how
+far the first and last frames are from the masters (mean absolute difference, 0-255). To reject
+a clip, set that scene's `transition` back to `type: zoom`, delete the clip and run
+`uv run dsp export`; `--all` will not quietly bring it back, but asking for that edge again
+renders a new one. The site falls back to the zoom whenever a clip fails or is slow to load.
 
 Checks: `uv run pytest -q`, `uv run ruff check .`, `uv run ruff format --check .`
 (`uv run ruff format .` to fix).

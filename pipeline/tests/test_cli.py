@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-import pytest
 from typer.testing import CliRunner
 
 from dreamscapes_pipeline.cli import app
@@ -37,37 +36,11 @@ COMMANDS = [
     "bakeoff",
 ]
 
-STUBS = [
-    ["generate", "--scene", "cliff-cottage", "--candidates", "6", "--provider", "openai"],
-    ["generate", "--all", "--no-reference", "--force", "--dry-run"],
-    ["select", "--scene", "cliff-cottage", "--repick"],
-    ["select", "--all", "--dry-run"],
-    ["grade", "--preview"],
-    ["export"],
-    ["review"],
-    ["morph", "--edge", "cliff-cottage", "prison-yard", "--dry-run"],
-    ["morph", "--all"],
-    ["bakeoff", "--dry-run"],
-]
-
-# Commands whose stubs have been replaced; test_cli_pipeline.py covers them.
-IMPLEMENTED = {"generate", "select", "grade", "export", "review", "bakeoff"}
-
 
 def test_help_lists_every_command():
     help_text = plain_help(["--help"])
     for command in COMMANDS:
         assert command in help_text
-
-
-@pytest.mark.parametrize(
-    "args", [a for a in STUBS if a[0] not in IMPLEMENTED], ids=lambda a: " ".join(a)
-)
-def test_unimplemented_commands_accept_their_options_and_exit_2(args, small_repo, monkeypatch):
-    monkeypatch.chdir(small_repo.root)
-    result = runner.invoke(app, args)
-    assert result.exit_code == 2, result.output
-    assert f"dsp {args[0]}: not implemented yet" in result.output
 
 
 def test_commands_find_the_root_from_a_subdirectory(placeholder_repo, monkeypatch):

@@ -28,6 +28,22 @@ export interface ScreenPoint {
   y: number;
 }
 
+/**
+ * Serves scenes.json with every transition set to the zoom. Tests about the loop's mechanics use
+ * it so each step takes about a second instead of a morph clip's eight; morph.spec.ts covers the
+ * clips, including the real ones.
+ */
+export async function useZoomTransitions(page: Page): Promise<void> {
+  await page.route('**/scenes.json', async (route) => {
+    const response = await route.fetch();
+    const data = (await response.json()) as Manifest;
+    for (const scene of data.scenes) {
+      scene.transition = { type: 'zoom' };
+    }
+    await route.fulfill({ response, json: data });
+  });
+}
+
 /** Marks the first-visit overlay as already seen, so tests start on a bare scene. */
 export async function skipIntro(page: Page): Promise<void> {
   await page.addInitScript(() => {
