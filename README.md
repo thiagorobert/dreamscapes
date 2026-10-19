@@ -251,18 +251,25 @@ neighbours: A, and B, which is A's `next` today.
 4. **Placeholders**, if the branch must stay green before the real images exist. Until then
    `dsp validate` fails on the missing master and `dsp export` cannot build `scenes.json`. Add
    a stand-in for the new id to `PLACEHOLDER_SCENES` in
-   `pipeline/dreamscapes_pipeline/placeholders.py`: a `Design` whose shape obeys the rules
-   above. Keep that table's own `next` pointers one loop, because
-   `dsp placeholders --reset-manifest` rebuilds the manifest from it. Then run
-   `uv run dsp placeholders` (it paints only scenes that have no real master) and
-   `uv run dsp export`. Otherwise keep the work on a branch until step 5 is done.
+   `pipeline/dreamscapes_pipeline/placeholders.py`. That is a
+   `PlaceholderScene(id, title, scene, bridge_object, placement, next, design=Design(...))`
+   whose `Design` draws a shape that obeys the rules above. Put the entry between A's and B's,
+   and re-point A's entry and the new entry exactly as in step 3. The table must stay in loop
+   order with its `next` pointers forming one loop, because `dsp placeholders --reset-manifest`
+   rebuilds the manifest from it. The pipeline's test fixtures are also built from this table,
+   and the tests take their scene counts and the loop's last scene from it, so they follow
+   along. Then run `uv run dsp placeholders` (it paints only scenes that have no real master)
+   and `uv run dsp export`. Otherwise keep the work on a branch until step 5 is done.
 5. **Run the pipeline** for the new scene, as for regenerating but without `--force` or
    `--repick`: `uv run dsp generate --scene <id>`, `uv run dsp select --scene <id>`,
    `uv run dsp grade`, `uv run dsp hotspot --scene <id>`, `uv run dsp validate` and
    `uv run dsp export`.
 6. **Morph clips** for the two new edges: `uv run dsp morph --edge <A> <id>` and
-   `uv run dsp morph --edge <id> <B>`, or `uv run dsp morph --all`, which renders just the
-   edges that have no clip and were never rejected. Review them as below.
+   `uv run dsp morph --edge <id> <B>`. `uv run dsp morph --all` also works. It renders the
+   edges that have no clip and were never rejected. It also re-renders any clip whose graded
+   masters changed since it was made, such as the clips next to a regenerated B. Like every paid
+   command it prints the estimated spend first, so run it with `--dry-run` to see which edges
+   it picks. Review the clips as below.
 7. `uv run dsp review`, then `cd ../web && pnpm build && pnpm e2e`. The end-to-end tests read
    the loop from `scenes.json`, so they walk the longer loop without changes. Commit the same
    paths as for a regenerated scene.
