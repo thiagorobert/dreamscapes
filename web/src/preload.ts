@@ -19,6 +19,19 @@ import type { ImageSource, Scene } from './types';
  */
 export const MAX_PIXEL_RATIO = 2;
 
+/**
+ * Viewports narrower than this (CSS px) are treated as phones and get one image pixel per CSS
+ * pixel. In portrait the cover box is three to four times the screen width, so even at 1x the
+ * picked file is the 1536 one; at 2x every phone would download the 2048 file, mostly for the
+ * parts of the image that are off-screen.
+ */
+export const PHONE_MAX_WIDTH = 768;
+
+/** The pixel-ratio ceiling for a viewport `viewportWidth` CSS pixels wide. */
+export function pixelRatioCap(viewportWidth: number): number {
+  return viewportWidth < PHONE_MAX_WIDTH ? 1 : MAX_PIXEL_RATIO;
+}
+
 /** Decoded pictures kept: current, next, next-next and previous. */
 export const PICTURE_CACHE_SIZE = 4;
 
@@ -34,9 +47,16 @@ export function pickSource(
   return sorted.find((source) => source.width >= neededWidth) ?? sorted.at(-1);
 }
 
-/** Device pixels needed to draw an image `cssWidth` CSS pixels wide at `pixelRatio`. */
-export function neededPixelWidth(cssWidth: number, pixelRatio: number): number {
-  return Math.ceil(cssWidth * Math.min(Math.max(pixelRatio, 1), MAX_PIXEL_RATIO));
+/**
+ * Image pixels worth fetching to draw an image `cssWidth` CSS pixels wide at `pixelRatio`, on a
+ * viewport `viewportWidth` CSS pixels wide.
+ */
+export function neededPixelWidth(
+  cssWidth: number,
+  pixelRatio: number,
+  viewportWidth: number,
+): number {
+  return Math.ceil(cssWidth * Math.min(Math.max(pixelRatio, 1), pixelRatioCap(viewportWidth)));
 }
 
 export interface PreparedPicture {
@@ -55,6 +75,8 @@ export interface PreparedPicture {
 export interface PreloaderOptions {
   /** CSS width the scene's image will be drawn at. */
   cssWidthFor: (scene: Scene) => number;
+  /** Current viewport width in CSS pixels. */
+  viewportWidth: () => number;
   /** Turns a manifest path into a URL. */
   resolve: (path: string) => string;
   /** Where off-screen clip elements live while they buffer. */
@@ -118,7 +140,11 @@ export class Preloader {
 
   /** The prepared picture for `scene`, from the cache or freshly started. */
   picture(scene: Scene): PreparedPicture {
-    const needed = neededPixelWidth(this.options.cssWidthFor(scene), this.pixelRatio());
+    const needed = neededPixelWidth(
+      this.options.cssWidthFor(scene),
+      this.pixelRatio(),
+      this.options.viewportWidth(),
+    );
     const cached = this.pictures.get(scene.id);
     if (cached) {
       // Re-insert to mark it most recently used.

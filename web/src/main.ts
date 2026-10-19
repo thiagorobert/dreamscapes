@@ -11,7 +11,10 @@ import { readStorage, writeStorage } from './storage';
 import { crossfade, playTransition, type TransitionKind } from './transition';
 import type { Scene } from './types';
 
-/** Keeps the depth counter across reloads of the same tab. */
+/**
+ * Keeps the depth counter across reloads of the same tab. It also survives opening the site
+ * afresh in that tab, on purpose: one tab is one long dream.
+ */
 const DEPTH_KEY = 'dreamscapes:depth';
 
 /** How long a click on the object waits for the next image before going ahead on its placeholder. */
@@ -93,6 +96,7 @@ class Dreamscapes {
     this.router = new Router((id) => dreams.scenes.has(id), dreams.start.id);
     this.preloader = new Preloader({
       cssWidthFor: (scene) => this.stage.coverFor(scene).width,
+      viewportWidth: () => this.stage.viewport().width,
       resolve: assetUrl,
       clipHost,
     });
