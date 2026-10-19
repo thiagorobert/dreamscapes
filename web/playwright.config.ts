@@ -32,6 +32,8 @@ export default defineConfig({
   webServer: {
     command: `pnpm exec vite preview --host 127.0.0.1 --port ${String(port)} --strictPort`,
     url: `${origin}${base}`,
-    reuseExistingServer: !isCI,
+    // Always start a fresh server: several worktrees of this repo can be checked out at once,
+    // and reusing whatever already listens on the port could test another checkout's build.
+    reuseExistingServer: false,
   },
 });
