@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -348,3 +350,71 @@ def test_spend_cap_refuses_before_any_call(placeholder_repo, monkeypatch):
     assert code == 1
     assert "estimated spend: up to $0.20 for 1 scene(s) (cap $0.10" in out
     assert segmenter.calls == [] and verifier.calls == []
+
+
+# --- how the mask points were read ---------------------------------------------------------------
+
+SAVED = json.loads(
+    (Path(__file__).parent / "fixtures" / "gemini_segmentation_responses.json").read_text()
+)
+
+
+class SavedInteractions:
+    """A Gemini client stand-in that answers with saved real responses, in turn."""
+
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls = 0
+
+    def create(self, **_kwargs):
+        self.calls += 1
+        usage = SimpleNamespace(
+            total_input_tokens=1500, total_output_tokens=400, total_thought_tokens=0
+        )
+        text = json.dumps(self.responses[min(self.calls, len(self.responses)) - 1])
+        return SimpleNamespace(output_text=text, usage=usage, id=f"interaction-{self.calls}")
+
+
+def saved_gemini(*responses) -> GeminiSegmenter:
+    return GeminiSegmenter(client=SimpleNamespace(interactions=SavedInteractions(*responses)))
+
+
+def test_the_reading_is_recorded_in_the_review_files(placeholder_repo):
+    # The prison yard's first real answer came back as [y, x]; its second as [x, y].
+    first, second = SAVED["prison-yard"]["responses"]
+    verifier = FakeVerifier(
+        [
+            Verdict(matches=False, reason="Not quite.", suggested_box=(0.6, 0.22, 0.72, 0.47)),
+            Verdict(matches=True, reason="The hoop."),
+        ]
+    )
+    code, out = run(placeholder_repo, segmenter=saved_gemini(first, second), verifier=verifier)
+    assert "read the mask points as [y, x] across the image (yx-image): 100%" in out
+    assert "read the mask points as [x, y] across the image (xy-image): 100%" in out
+    assert "warning: even the best reading" not in out
+    review = placeholder_repo.review_dir("prison-yard")
+    assert (review / "hotspot-1-yx-image.png").exists()
+    assert (review / "hotspot-2-xy-image.png").exists()
+    assert not (review / "hotspot-1.png").exists()
+    record = json.loads((review / "hotspot.json").read_text())
+    one, two = record["attempts"]
+    assert (one["reading"], two["reading"]) == ("yx-image", "xy-image")
+    assert (one["overlay"], two["overlay"]) == ("hotspot-1-yx-image.png", "hotspot-2-xy-image.png")
+    assert one["points_outside_box"] == 0
+    readings = one["candidates"][0]["readings"]
+    assert list(readings) == ["xy-image", "yx-image", "xy-box", "yx-box"]
+    assert readings["yx-image"]["inside"] == 1.0
+    assert readings["xy-image"]["inside"] < 0.1
+
+
+def test_a_garbled_mask_is_warned_about(placeholder_repo):
+    mixed = SAVED["overgrown-greenhouse"]["responses"][0]
+    verifier = FakeVerifier([Verdict(matches=False, reason="It includes a wedge of wall.")])
+    code, out = run(placeholder_repo, segmenter=saved_gemini(mixed), verifier=verifier)
+    assert code == 1
+    assert (
+        "warning: even the best reading leaves 8% of the mask points outside the box Gemini gave"
+        in out
+    )
+    record = json.loads((placeholder_repo.review_dir("prison-yard") / "hotspot.json").read_text())
+    assert record["attempts"][0]["points_outside_box"] == pytest.approx(0.08, abs=0.005)

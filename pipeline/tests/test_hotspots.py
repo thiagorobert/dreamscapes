@@ -28,9 +28,9 @@ from dreamscapes_pipeline.hotspots import (
     bridge_updates,
     check_box,
     choose_candidate,
+    choose_mask_reading,
     clean_polygon,
     convex_hull,
-    detect_mask_frame,
     expand_box,
     extract_hotspot,
     gemini_candidate,
@@ -41,6 +41,7 @@ from dreamscapes_pipeline.hotspots import (
     rasterize,
     render_closeup,
     render_overlay,
+    score_mask_readings,
 )
 
 W, H = 2048, 1152
@@ -185,38 +186,45 @@ def test_clean_polygon_rasterises_at_the_given_size():
 BOX = [200, 100, 600, 500]  # [ymin, xmin, ymax, xmax]: x 0.1-0.5, y 0.2-0.6
 
 
+def reading_of(box_2d, mask) -> str:
+    return choose_mask_reading(score_mask_readings(box_2d, mask)).reading
+
+
 def test_box_relative_mask_maps_into_the_box():
     corners = [[0, 0], [1000, 0], [1000, 1000], [0, 1000]]
-    polygon = gemini_mask_to_polygon(BOX, corners, "box")
+    polygon = gemini_mask_to_polygon(BOX, corners, "xy-box")
     assert same_points(polygon, box_polygon(0.1, 0.2, 0.5, 0.6))
-    middle = gemini_mask_to_polygon(BOX, [[500, 500]], "box")
+    middle = gemini_mask_to_polygon(BOX, [[500, 500]], "xy-box")
     assert same_points(middle, [(0.3, 0.4)])
 
 
 def test_image_relative_mask_is_just_scaled():
-    polygon = gemini_mask_to_polygon(BOX, [[100, 200], [500, 200], [500, 600]], "image")
+    polygon = gemini_mask_to_polygon(BOX, [[100, 200], [500, 200], [500, 600]], "xy-image")
     assert same_points(polygon, [(0.1, 0.2), (0.5, 0.2), (0.5, 0.6)])
+    swapped = gemini_mask_to_polygon(BOX, [[200, 100], [200, 500], [600, 500]], "yx-image")
+    assert same_points(swapped, [(0.1, 0.2), (0.5, 0.2), (0.5, 0.6)])
 
 
 def test_a_slender_outline_in_a_wide_box_stays_in_image_coordinates():
     # The points span well under half of their box, which is normal for a thin object.
     box = [200, 200, 800, 800]
     mask = [[400, 300], [600, 300], [600, 700], [400, 700]]
-    assert detect_mask_frame(box, mask) == "image"
+    assert reading_of(box, mask) == "xy-image"
     assert same_points(
         gemini_mask_to_polygon(box, mask), [(0.4, 0.3), (0.6, 0.3), (0.6, 0.7), (0.4, 0.7)]
     )
     lighthouse = [[480, 150], [520, 150], [530, 900], [470, 900]]
-    assert detect_mask_frame([100, 100, 950, 900], lighthouse) == "image"
+    assert reading_of([100, 100, 950, 900], lighthouse) == "xy-image"
 
 
 def test_mask_frame_is_detected_from_where_the_points_fall():
     image_points = [[110, 210], [490, 220], [480, 590], [120, 580]]
     box_points = [[20, 30], [980, 10], [960, 990], [10, 970]]
-    assert detect_mask_frame(BOX, image_points) == "image"
-    assert detect_mask_frame(BOX, box_points) == "box"
+    assert reading_of(BOX, image_points) == "xy-image"
+    assert reading_of(BOX, [[y, x] for x, y in image_points]) == "yx-image"
+    assert reading_of(BOX, box_points) == "xy-box"
     assert same_points(
-        gemini_mask_to_polygon(BOX, box_points), gemini_mask_to_polygon(BOX, box_points, "box")
+        gemini_mask_to_polygon(BOX, box_points), gemini_mask_to_polygon(BOX, box_points, "xy-box")
     )
 
 

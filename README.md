@@ -98,7 +98,16 @@ verified outline replaces the hotspot fields under `bridge:` and the mask
 `assets/masks/<scene>.png`; a rejected one never does, so a failed run only marks the scene
 unverified and keeps its polygon. Comments and everything else in `content/scenes.yaml` stay as
 they were. Review overlays go to `assets/review/<scene>/`: `hotspot.png` is the hotspot the
-manifest now holds, `hotspot-<n>.png` each attempt, and `hotspot.json` describes them.
+manifest now holds, `hotspot-<n>-<reading>.png` each attempt, and `hotspot.json` describes them.
+
+Gemini does not always send its mask points in the documented `[x, y]` order: on half of the
+first real scenes they came back as `[y, x]` while the bounding box kept its order. So every
+mask is read all four ways (`xy-image`, `yx-image`, `xy-box`, `yx-box`: either order, 0-1000
+across the image or across the box), and the reading whose outline stays inside its own box and
+reaches across it wins, ties going to `xy-image`. The chosen reading is printed, named in the
+overlay file and recorded in `hotspot.json` with every reading's score; a warning is printed
+when even the best reading leaves mask points outside the box (some masks switch order
+part-way round, and those outlines are usually garbled).
 
 `--dry-run` prints the exact Gemini and Claude requests and runs the rest of the pipeline on the
 scene's committed mask. It sends nothing and leaves `content/scenes.yaml` and the masks alone,

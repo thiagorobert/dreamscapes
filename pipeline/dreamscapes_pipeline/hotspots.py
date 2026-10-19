@@ -19,8 +19,8 @@ For one scene (plan section 6.2):
    mask to assets/masks/<scene>.png. When not, write only ``verified: false``, the reasons and
    ``needs_manual_hotspot: true``: the existing polygon, its source and its mask stay as they
    were. Either way, save review overlays under assets/review/<scene>/ (hotspot.png is the
-   hotspot the manifest now holds, hotspot-<n>.png each attempt) and report the hotspot rules
-   that `dsp validate` enforces.
+   hotspot the manifest now holds, hotspot-<n>-<reading>.png each attempt, named after how
+   the mask points were read) and report the hotspot rules that `dsp validate` enforces.
 
 What was checked against the live documentation on 2026-10-19
 ---------------------------------------------------------------
@@ -42,10 +42,13 @@ Gemini, https://ai.google.dev/gemini-api/docs/image-understanding (segmentation 
 * Response: ``box_2d`` is ``[ymin, xmin, ymax, xmax]`` normalised to 0-1000, and ``mask`` is "the
   segmentation mask inside the bounding box as a polygon of [x, y] coordinates normalized to
   0-1000". The page does not say whether the mask's 0-1000 span the box or the whole image.
-  The real-API smoke test settled it: the points are 0-1000 across the whole image, in [x, y]
-  order (a telephone box with box_2d [409, 569, 746, 665] came back with mask x in 571-664 and
-  y in 409-746). `detect_mask_frame` checks this per entry, so a model that switches to
-  box-relative points is still read correctly.
+  The real-API smoke test found the points 0-1000 across the whole image, in [x, y] order (a
+  telephone box with box_2d [409, 569, 746, 665] came back with mask x in 571-664 and y in
+  409-746). The first ten real scenes then showed that the order is not reliable: five of them
+  came back with every mask point as [y, x] while box_2d kept its documented order, and a few
+  masks switch from one order to the other part-way round the outline. So each entry is read
+  all four ways ([x, y] or [y, x], across the image or across the box), and the reading that
+  keeps the outline inside its own box and reaching across it wins (`choose_mask_reading`).
 * Pricing, https://ai.google.dev/gemini-api/docs/pricing: $0.75 per million input tokens and
   $3.75 per million output tokens (thinking included) until 2026-12-31.
 
@@ -150,7 +153,27 @@ HIGHLIGHT = (255, 43, 214)
 HIGHLIGHT_ALPHA = 0.45
 
 SegmenterName = Literal["gemini", "sam3"]
-MaskFrame = Literal["box", "image"]
+
+MaskReading = Literal["xy-image", "yx-image", "xy-box", "yx-box"]
+"""How to read one of Gemini's mask points: ``[x, y]`` or ``[y, x]``, 0-1000 across the whole
+image or across the entry's own ``box_2d``."""
+
+# Every reading, in the order that wins a tie: the documented [x, y] across the image first, then
+# [y, x] across the image (what Gemini sent for five of the first ten real scenes), then the two
+# box-relative readings that the documentation's wording also allows.
+MASK_READINGS: tuple[MaskReading, ...] = ("xy-image", "yx-image", "xy-box", "yx-box")
+READING_NAMES: dict[MaskReading, str] = {
+    "xy-image": "[x, y] across the image",
+    "yx-image": "[y, x] across the image",
+    "xy-box": "[x, y] across the box",
+    "yx-box": "[y, x] across the box",
+}
+# Outlines brush or slightly overshoot their own box, so a point this close to it (as a fraction
+# of the image, 10 on Gemini's 0-1000 scale) still counts as inside.
+READING_TOLERANCE = 0.01
+# Readings that score within this of the best one count as tied, and the tie goes to the one
+# earliest in MASK_READINGS.
+READING_TIE_MARGIN = 0.02
 
 # The model's field order, used to place hotspot fields that a scene does not have yet.
 BRIDGE_FIELD_ORDER = tuple(Bridge.model_fields)
@@ -162,6 +185,46 @@ BRIDGE_FIELD_ORDER = tuple(Bridge.model_fields)
 
 
 @dataclass(frozen=True)
+class ReadingScore:
+    """How well one reading of a Gemini mask fits the box Gemini gave for the same entry.
+
+    ``box_2d`` is reliable even when the mask points are not in the documented order, and an
+    outline of the object has to stay inside the object's box and reach across it. So a reading
+    is scored by the share of its points that land inside the box and by how much of the box's
+    width and height those points span.
+    """
+
+    reading: MaskReading
+    inside: float
+    """Share of the mask points inside ``box_2d`` (within `READING_TOLERANCE`), 0-1."""
+    span: tuple[float, float]
+    """Width and height of the extent of the points inside the box, as fractions of the box's."""
+
+    @property
+    def total(self) -> float:
+        """``inside`` times both spans: 1.0 for an outline that stays in its box and reaches
+        all four sides, near 0 for the slivers and stray points that a wrong reading gives."""
+        return self.inside * self.span[0] * self.span[1]
+
+    @property
+    def outside(self) -> float:
+        return 1.0 - self.inside
+
+    def describe(self) -> str:
+        return (
+            f"{READING_NAMES[self.reading]} ({self.reading}): {self.inside:.0%} of its points "
+            f"inside its box, spanning {self.span[0]:.0%} x {self.span[1]:.0%} of it"
+        )
+
+    def as_record(self) -> dict[str, Any]:
+        return {
+            "inside": round(self.inside, 4),
+            "span": [round(self.span[0], 4), round(self.span[1], 4)],
+            "total": round(self.total, 4),
+        }
+
+
+@dataclass(frozen=True)
 class Candidate:
     """One instance of the object that a segmenter found."""
 
@@ -169,6 +232,10 @@ class Candidate:
     bbox: BBox
     label: str
     score: float | None = None
+    reading: ReadingScore | None = None
+    """For a Gemini mask: the reading of its points that was used. None for other sources."""
+    readings: tuple[ReadingScore, ...] = ()
+    """For a Gemini mask: every reading that was considered, in `MASK_READINGS` order."""
 
     @property
     def area(self) -> float:
@@ -413,40 +480,26 @@ def box_to_1000(box: BBox) -> list[int]:
     return [round(y0 * 1000), round(x0 * 1000), round(y1 * 1000), round(x1 * 1000)]
 
 
-def detect_mask_frame(box_2d: Sequence[float], mask: Sequence[Sequence[float]]) -> MaskFrame:
-    """Whether mask points are 0-1000 across the whole image or across the box.
-
-    The smoke test showed Gemini sends whole-image points, so that is the answer unless the
-    points cannot be whole-image ones: an outline of the object has to lie inside the object's
-    own box. Points that fall clearly outside it can only make sense as box-relative. How much
-    of the box an outline spans says nothing either way (a slender lighthouse in a wide box
-    spans a small part of it), so it is not used.
-    """
-    x0, y0, x1, y1 = (v * 1000 for v in _box_from_1000(box_2d))
-    tolerance = 20  # 2% of the image, for outlines that brush the box edge
-    inside = all(
-        x0 - tolerance <= px <= x1 + tolerance and y0 - tolerance <= py <= y1 + tolerance
-        for px, py in mask
-    )
-    return "image" if inside else "box"
-
-
-def gemini_mask_to_polygon(
+def read_mask_points(
     box_2d: Sequence[float],
     mask: Sequence[Sequence[float]],
-    frame: MaskFrame | Literal["auto"] = "auto",
+    reading: MaskReading,
+    *,
+    clamp: bool = True,
 ) -> Polygon:
-    """Convert a Gemini mask polygon (0-1000) to normalised image coordinates.
+    """Gemini mask points (0-1000) in normalised image coordinates, read as ``reading`` says.
 
-    ``frame="box"`` reads the points as 0-1000 across the bounding box, ``"image"`` as 0-1000
-    across the image, and ``"auto"`` decides per entry with `detect_mask_frame`.
+    With ``clamp`` (the default) every point is kept inside the image, or inside the box for a
+    box-relative reading; scoring a reading turns it off so that stray points show up as such.
     """
+    order, frame = reading.split("-")
     x0, y0, x1, y1 = _box_from_1000(box_2d)
-    if frame == "auto":
-        frame = detect_mask_frame(box_2d, mask)
     polygon: Polygon = []
-    for px, py in mask:
-        u, v = min(max(px / 1000.0, 0.0), 1.0), min(max(py / 1000.0, 0.0), 1.0)
+    for first, second in mask:
+        px, py = (first, second) if order == "xy" else (second, first)
+        u, v = px / 1000.0, py / 1000.0
+        if clamp:
+            u, v = min(max(u, 0.0), 1.0), min(max(v, 0.0), 1.0)
         if frame == "box":
             polygon.append((x0 + u * (x1 - x0), y0 + v * (y1 - y0)))
         else:
@@ -454,11 +507,87 @@ def gemini_mask_to_polygon(
     return polygon
 
 
-def gemini_candidate(entry: _LenientMask, frame: MaskFrame | Literal["auto"] = "auto"):
-    """A candidate from one response entry; a missing mask falls back to the box itself."""
+def _extent(values: Sequence[float], low: float, high: float) -> float:
+    if not values or high <= low:
+        return 0.0
+    return min((max(values) - min(values)) / (high - low), 1.0)
+
+
+def score_mask_reading(
+    box_2d: Sequence[float], mask: Sequence[Sequence[float]], reading: MaskReading
+) -> ReadingScore:
+    """How well ``reading`` of the mask points fits the entry's own box (see `ReadingScore`)."""
+    x0, y0, x1, y1 = _box_from_1000(box_2d)
+    tol = READING_TOLERANCE
+    points = read_mask_points(box_2d, mask, reading, clamp=False)
+    inside = [
+        (min(max(x, x0), x1), min(max(y, y0), y1))
+        for x, y in points
+        if x0 - tol <= x <= x1 + tol and y0 - tol <= y <= y1 + tol
+    ]
+    share = len(inside) / len(points) if points else 0.0
+    span = (_extent([x for x, _ in inside], x0, x1), _extent([y for _, y in inside], y0, y1))
+    return ReadingScore(reading=reading, inside=share, span=span)
+
+
+def score_mask_readings(
+    box_2d: Sequence[float], mask: Sequence[Sequence[float]]
+) -> tuple[ReadingScore, ...]:
+    """Every reading of the mask, scored, in `MASK_READINGS` order."""
+    return tuple(score_mask_reading(box_2d, mask, reading) for reading in MASK_READINGS)
+
+
+def choose_mask_reading(scores: Sequence[ReadingScore]) -> ReadingScore:
+    """The best-scoring reading; near-ties go to the earliest in `MASK_READINGS`.
+
+    Gemini's documentation says ``[x, y]`` and the smoke test saw whole-image points, but on
+    five of the first ten real scenes every mask came back as ``[y, x]`` while ``box_2d`` stayed
+    ``[ymin, xmin, ymax, xmax]``. Read the documented way, those outlines collapsed into slivers
+    that Claude rightly rejected. Only one reading puts an outline inside its own box and across
+    it, so on the saved responses the right reading wins by a wide margin (see the tests).
+
+    The two box-relative readings always score the same, because a box is square in its own
+    0-1000 frame, so an ``[y, x]`` box-relative mask would be read as ``[x, y]``; telling them
+    apart would take looking at the image. Gemini has not been seen to send either.
+    """
+    ordered = sorted(scores, key=lambda s: MASK_READINGS.index(s.reading))
+    best = max(s.total for s in ordered)
+    return next(s for s in ordered if s.total >= best - READING_TIE_MARGIN)
+
+
+def gemini_mask_to_polygon(
+    box_2d: Sequence[float],
+    mask: Sequence[Sequence[float]],
+    reading: MaskReading | Literal["auto"] = "auto",
+) -> Polygon:
+    """Convert a Gemini mask polygon (0-1000) to normalised image coordinates.
+
+    ``reading`` fixes the point order and frame (see `MaskReading`); ``"auto"`` picks the one
+    that fits the entry's box best with `choose_mask_reading`.
+    """
+    if reading == "auto":
+        reading = choose_mask_reading(score_mask_readings(box_2d, mask)).reading
+    return read_mask_points(box_2d, mask, reading)
+
+
+def gemini_candidate(
+    entry: _LenientMask, reading: MaskReading | Literal["auto"] = "auto"
+) -> Candidate | None:
+    """A candidate from one response entry; a missing mask falls back to the box itself.
+
+    The candidate records which reading of the mask points was used and how every reading
+    scored, so the review files can show it.
+    """
     bbox = _box_from_1000(entry.box_2d)
+    chosen: ReadingScore | None = None
+    scores: tuple[ReadingScore, ...] = ()
     if len(entry.mask) >= 3:
-        polygon = dedupe_vertices(gemini_mask_to_polygon(entry.box_2d, entry.mask, frame))
+        scores = score_mask_readings(entry.box_2d, entry.mask)
+        if reading == "auto":
+            chosen = choose_mask_reading(scores)
+        else:
+            chosen = next(s for s in scores if s.reading == reading)
+        polygon = dedupe_vertices(read_mask_points(entry.box_2d, entry.mask, chosen.reading))
         if geometry.simplicity_problem(polygon) is not None:
             # A crossing outline has its vertices in the wrong order, and filling it leaves
             # holes inside the object (seen in the smoke test: a C shape that missed the body
@@ -468,9 +597,9 @@ def gemini_candidate(entry: _LenientMask, frame: MaskFrame | Literal["auto"] = "
     else:
         x0, y0, x1, y1 = bbox
         polygon = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
-    if geometry.area(polygon) <= 0:
+    if len(polygon) < 3 or geometry.area(polygon) <= 0:
         return None
-    return Candidate(polygon=polygon, bbox=bbox, label=entry.label)
+    return Candidate(polygon=polygon, bbox=bbox, label=entry.label, reading=chosen, readings=scores)
 
 
 def dedupe_vertices(polygon: Sequence[Sequence[float]]) -> Polygon:
@@ -536,11 +665,11 @@ class GeminiSegmenter:
         self,
         client: Any | None = None,
         model: str = GEMINI_MODEL,
-        frame: MaskFrame | Literal["auto"] = "auto",
+        reading: MaskReading | Literal["auto"] = "auto",
     ):
         self._client = client
         self.model = model
-        self.frame = frame
+        self.reading = reading
         self.thinking_level = GEMINI_THINKING_LEVEL
         self.last_cost_usd = 0.0
         self.last_raw: str | None = None
@@ -608,7 +737,7 @@ class GeminiSegmenter:
                 self.thinking_level = stronger  # a refused request is not billed
         self.last_raw = interaction.output_text or ""
         self.last_cost_usd = gemini_cost(getattr(interaction, "usage", None))
-        candidates = (gemini_candidate(e, self.frame) for e in parse_gemini_masks(self.last_raw))
+        candidates = (gemini_candidate(e, self.reading) for e in parse_gemini_masks(self.last_raw))
         return [c for c in candidates if c is not None]
 
 
@@ -1285,6 +1414,8 @@ def extract_hotspot(
                 f"    chose '{chosen.label}': {chosen.area:.2%} of the frame, centroid "
                 f"{_fmt_point(chosen.centroid)}"
             )
+            for line in reading_report(chosen):
+                echo(f"    {line}")
             polygon = clean_polygon(chosen.polygon, image_size) or None
             if polygon is None:
                 verdict = Verdict(matches=False, reason="The chosen outline was empty.")
@@ -1325,6 +1456,28 @@ def extract_hotspot(
     return result
 
 
+def reading_report(candidate: Candidate) -> list[str]:
+    """What to print about how a Gemini mask was read: the reading used and, when even that
+    reading leaves points outside the box, a warning. Nothing for other segmenters."""
+    reading = candidate.reading
+    if reading is None:
+        return []
+    lines = [f"read the mask points as {reading.describe()}"]
+    if reading.outside > 0:
+        lines.append(
+            f"warning: even the best reading leaves {reading.outside:.0%} of the mask points "
+            "outside the box Gemini gave, so the outline is probably garbled in places"
+        )
+    return lines
+
+
+def overlay_name(attempt: Attempt) -> str:
+    """``hotspot-<n>.png``, with the mask reading when there is one: ``hotspot-1-yx-image.png``."""
+    reading = attempt.chosen.reading if attempt.chosen else None
+    suffix = f"-{reading.reading}" if reading else ""
+    return f"hotspot-{attempt.number}{suffix}.png"
+
+
 def _fmt_point(point: Sequence[float]) -> str:
     return f"({point[0]:.3f}, {point[1]:.3f})"
 
@@ -1348,7 +1501,7 @@ def bridge_updates(result: HotspotResult, source: HotspotSource) -> dict[str, An
     Only a verified outline replaces the polygon and its derived fields. After a failure the
     existing hotspot (perhaps verified earlier, perhaps drawn by hand) stays exactly as it was,
     together with its ``source`` and mask; the scene is only flagged for manual work. The
-    rejected outlines are kept for review as assets/review/<scene>/hotspot-<n>.png.
+    rejected outlines are kept for review as assets/review/<scene>/hotspot-<n>[-<reading>].png.
     """
     final = result.final
     text = result.verification_text()
@@ -1391,6 +1544,7 @@ def write_bridge_fields(paths: RepoPaths, scene_id: str, updates: dict[str, Any]
 
 
 def _attempt_record(attempt: Attempt) -> dict[str, Any]:
+    chosen_reading = attempt.chosen.reading if attempt.chosen else None
     return {
         "number": attempt.number,
         "hint_box": attempt.hint_box,
@@ -1402,10 +1556,15 @@ def _attempt_record(attempt: Attempt) -> dict[str, Any]:
                 "area": round(c.area, DERIVED_DECIMALS),
                 "centroid": c.centroid,
                 "vertices": len(c.polygon),
+                "reading": c.reading.reading if c.reading else None,
+                "readings": {r.reading: r.as_record() for r in c.readings},
             }
             for c in attempt.candidates
         ],
         "chosen": attempt.chosen.label if attempt.chosen else None,
+        "reading": chosen_reading.reading if chosen_reading else None,
+        "points_outside_box": round(chosen_reading.outside, 4) if chosen_reading else None,
+        "overlay": overlay_name(attempt) if attempt.polygon else None,
         "polygon": attempt.polygon,
         "verdict": attempt.verdict.model_dump(),
         "segment_cost_usd": round(attempt.segment_cost_usd, 6),
@@ -1478,10 +1637,10 @@ def _process_scene(
         stale.unlink()
     for attempt in result.attempts:
         if attempt.polygon:
-            render_overlay(image, attempt.polygon).save(review / f"hotspot-{attempt.number}.png")
+            render_overlay(image, attempt.polygon).save(review / overlay_name(attempt))
     # hotspot.png always shows the hotspot the manifest holds after this run: the new outline
-    # when it was verified, otherwise the one that was kept. Rejected outlines are the
-    # hotspot-<n>.png files above.
+    # when it was verified, otherwise the one that was kept. Every attempt is one of the
+    # hotspot-<n>[-<reading>].png files above.
     overlay = review / "hotspot.png"
     kept = result.polygon or (scene.bridge.polygon if len(scene.bridge.polygon) >= 3 else None)
     if kept:
