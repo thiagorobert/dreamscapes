@@ -76,8 +76,10 @@ scenes:
     bridge:
       object: basketball hoop
       placement: >-
-        right of centre in the middle distance at the edge of the court, backboard, rim and net together
-        about a fifth of the frame height, its pole rising from the ground below
+        just right of centre, nearer the viewer at the edge of the court, close enough that the backboard,
+        rim and torn net read clearly: backboard, rim and net together about a quarter of the frame
+        height and about a seventh of the frame width wide, its single steel pole rising from the
+        ground below
       polygon:
         - [0.5468, 0.3115]
         - [0.6932, 0.3115]
@@ -87,6 +89,13 @@ scenes:
       verified: false
       needs_manual_hotspot: false
     next: rooftop-court
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 1
+      log_ids:
+        - 61671b7d31ff476d
+        - 939c9bcf25244c40
     transition:
       type: zoom
   - id: rooftop-court
@@ -144,6 +153,13 @@ scenes:
       verified: false
       needs_manual_hotspot: false
     next: balloon-salt-flats
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 3
+      log_ids:
+        - f58eb753ca754bce
+        - e8f592d4f8ab415a
     transition:
       type: zoom
   - id: balloon-salt-flats
@@ -163,8 +179,11 @@ scenes:
     bridge:
       object: wooden door
       placement: >-
-        just right of centre on the island of dry salt in the middle distance, about a third of the
-        frame height tall from threshold to lintel, casting a soft shadow rather than a reflection
+        just right of centre, on the island of dry salt a short way in front of the viewer, close
+        enough that its panels and handle read clearly: a tall, broad wooden door in a heavy frame,
+        standing from about a quarter of the way down from the top edge to about three quarters of
+        the way down, and about a tenth of the frame width wide, casting a soft shadow rather than
+        a reflection
       polygon:
         - [0.5012, 0.7649]
         - [0.5988, 0.7649]
@@ -185,6 +204,13 @@ scenes:
       verified: false
       needs_manual_hotspot: false
     next: endless-library
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 3
+      log_ids:
+        - 815575b1eeaa41eb
+        - 6cd100e888ee4f67
     transition:
       type: zoom
   - id: endless-library
@@ -217,6 +243,13 @@ scenes:
       verified: false
       needs_manual_hotspot: false
     next: overgrown-greenhouse
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 2
+      log_ids:
+        - a733c4158b294deb
+        - d59f0318826a43db
     transition:
       type: zoom
   - id: overgrown-greenhouse
@@ -253,6 +286,13 @@ scenes:
       verified: false
       needs_manual_hotspot: false
     next: mountain-road-phonebox
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 1
+      log_ids:
+        - 0ec90f7e56304fd3
+        - 72a4b177f2534d4b
     transition:
       type: zoom
   - id: mountain-road-phonebox
@@ -282,6 +322,13 @@ scenes:
       verified: false
       needs_manual_hotspot: false
     next: drowned-street
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 4
+      log_ids:
+        - 49a9c2da8e474149
+        - ba0990fd4bae4055
     transition:
       type: zoom
   - id: drowned-street
@@ -310,6 +357,13 @@ scenes:
       verified: false
       needs_manual_hotspot: false
     next: fog-ship-deck
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 1
+      log_ids:
+        - 6af4fbc5d67e40e7
+        - 19a9ce7e52724af3
     transition:
       type: zoom
   - id: fog-ship-deck
@@ -339,6 +393,13 @@ scenes:
       verified: false
       needs_manual_hotspot: false
     next: lighthouse-gallery
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 4
+      log_ids:
+        - f7784affb6ee41de
+        - 6d18520c1ceb483c
     transition:
       type: zoom
   - id: lighthouse-gallery
@@ -357,8 +418,11 @@ scenes:
     bridge:
       object: cottage
       placement: >-
-        left of centre, seen through a single pane of the lamp-room glass on the clifftop across the
-        inlet, about a quarter of the frame height tall including roof and chimney
+        left of centre, about two fifths of the way across the frame and well clear of the left edge,
+        on the near clifftop just across a narrow inlet, close enough that its door, lit window and
+        chimney read clearly, framed whole within one tall pane of the lamp-room glass: from roof
+        ridge to doorstep about a quarter of the frame height, and about a sixth of the frame width
+        wide
       polygon:
         - [0.3444, 0.4748]
         - [0.3008, 0.5523]
@@ -372,5 +436,12 @@ scenes:
       verified: false
       needs_manual_hotspot: false
     next: cliff-cottage
+    generation:
+      provider: gemini
+      model: gemini-nano-banana-2.1
+      selected_candidate: 2
+      log_ids:
+        - f2eb4eab1a954c07
+        - f93a785894694769
     transition:
       type: zoom
