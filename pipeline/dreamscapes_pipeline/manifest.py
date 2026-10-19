@@ -89,6 +89,16 @@ class Bridge(_Strict):
         "If the master changes afterwards (for example `dsp select` adopts another candidate), "
         "the polygon may no longer fit it, so `dsp hotspot --all` treats the scene as unverified.",
     )
+    verified_image: str | None = Field(
+        default=None,
+        description="The picture the segmenter and the verifier were shown (the graded master "
+        "when there is one), relative to the repository root.",
+    )
+    verified_image_sha256: Sha256 | None = Field(
+        default=None,
+        description="SHA-256 of `verified_image` at verification time; `dsp hotspot --all` "
+        "also treats the scene as unverified when that picture has changed.",
+    )
     score: float | None = Field(default=None, description="Segmenter confidence, if reported.")
     needs_manual_hotspot: bool = Field(
         default=False,

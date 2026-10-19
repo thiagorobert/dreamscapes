@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -455,20 +456,35 @@ def test_a_dry_run_logs_nothing(placeholder_repo, monkeypatch):
 # --- a master that changed after verification ----------------------------------------------------
 
 
-def replace_master(paths, scene_id="prison-yard"):
-    """What `dsp select` does when it adopts another candidate: a new master file."""
+def replace_master(paths, scene_id="prison-yard", *, regrade=True):
+    """What `dsp select` does when it adopts another candidate: a new master file. With
+    ``regrade``, `dsp grade` then runs too and writes a graded copy of the new master."""
     Image.new("RGB", (2048, 1152), (120, 60, 30)).save(paths.master(scene_id))
+    if regrade:
+        Image.new("RGB", (2048, 1152), (110, 64, 40)).save(paths.graded(scene_id))
+
+
+def age(path, seconds):
+    """Move a file's modification time back, as if it had been written ``seconds`` ago."""
+    stat = path.stat()
+    os.utime(path, (stat.st_atime - seconds, stat.st_mtime - seconds))
 
 
 def bridge(paths, scene_id="prison-yard"):
     return load_manifest(paths.scenes_yaml).scene(scene_id).bridge
 
 
-def test_a_verified_hotspot_records_its_master(placeholder_repo):
+def test_a_verified_hotspot_records_what_it_was_checked_against(placeholder_repo):
     assert run(placeholder_repo)[0] == 0
     master = sha256_file(placeholder_repo.master("prison-yard"))
-    assert bridge(placeholder_repo).verified_master_sha256 == master
-    assert f"verified_master_sha256: {master}" in placeholder_repo.scenes_yaml.read_text()
+    graded = sha256_file(placeholder_repo.graded("prison-yard"))
+    recorded = bridge(placeholder_repo)
+    assert recorded.verified_master_sha256 == master
+    assert recorded.verified_image == "assets/masters/prison-yard.graded.png"
+    assert recorded.verified_image_sha256 == graded
+    text = placeholder_repo.scenes_yaml.read_text()
+    assert f"verified_master_sha256: {master}" in text
+    assert f"verified_image_sha256: {graded}" in text
 
 
 def test_all_redoes_a_verified_scene_whose_master_changed(placeholder_repo):
@@ -478,13 +494,16 @@ def test_all_redoes_a_verified_scene_whose_master_changed(placeholder_repo):
     code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
     assert code == 0, out
     assert (
-        "prison-yard: its master has changed since the hotspot was verified, so it counts as "
-        "unverified" in out
+        "prison-yard: its master or graded copy has changed since the hotspot was verified, so "
+        "it counts as unverified" in out
     )
     assert "already verified" not in out
     assert len(segmenter.calls) == 10
-    new_master = sha256_file(placeholder_repo.master("prison-yard"))
-    assert bridge(placeholder_repo).verified_master_sha256 == new_master
+    # The new outline was traced on the new graded copy, and that is what is recorded.
+    assert placeholder_repo.graded("prison-yard") in [call[0] for call in segmenter.calls]
+    redone = bridge(placeholder_repo)
+    assert redone.verified_master_sha256 == sha256_file(placeholder_repo.master("prison-yard"))
+    assert redone.verified_image_sha256 == sha256_file(placeholder_repo.graded("prison-yard"))
 
     # Recorded again, so the next --all leaves it alone.
     segmenter = FakeSegmenter([[hoop()]])
@@ -498,7 +517,9 @@ def test_naming_a_scene_whose_master_changed_says_so(placeholder_repo):
     replace_master(placeholder_repo)
     code, out = run(placeholder_repo)
     assert code == 0, out
-    assert "prison-yard: its master has changed since the hotspot was verified" in out
+    assert "prison-yard: its master or graded copy has changed since the hotspot was verified" in (
+        out
+    )
 
 
 def test_a_failed_rerun_drops_the_master_hash(placeholder_repo):
@@ -542,5 +563,98 @@ def test_a_hand_drawn_hotspot_on_a_changed_master_is_kept_with_a_warning(placeho
     code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
     assert code == 0, out
     assert "prison-yard: kept its hand-drawn hotspot" in out
-    assert "warning: its master has changed since then; redraw it to match" in out
+    assert "warning: its master or graded copy has changed since then; redraw it to match" in out
     assert len(segmenter.calls) == 9
+
+
+def test_a_graded_copy_older_than_its_master_is_refused(placeholder_repo):
+    # dsp select adopted a new master but dsp grade has not run: the graded copy still shows
+    # the old picture, so an outline traced on it must not be recorded against the new master.
+    assert run(placeholder_repo)[0] == 0
+    before = placeholder_repo.scenes_yaml.read_bytes()
+    replace_master(placeholder_repo, regrade=False)
+    age(placeholder_repo.graded("prison-yard"), 3600)
+    segmenter = FakeSegmenter([[hoop()]])
+    code, out = run(placeholder_repo, segmenter=segmenter)
+    assert code == 1
+    assert (
+        "prison-yard: error: assets/masters/prison-yard.graded.png is older than "
+        "assets/masters/prison-yard.png" in out
+    )
+    assert "run `dsp grade` first" in out
+    assert segmenter.calls == []
+    assert placeholder_repo.scenes_yaml.read_bytes() == before
+
+    # --all reaches the same scene (its master changed) and refuses it the same way.
+    segmenter = FakeSegmenter([[hoop()]])
+    code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
+    assert code == 1
+    assert "prison-yard: error: assets/masters/prison-yard.graded.png is older" in out
+    assert all(call[0] != placeholder_repo.graded("prison-yard") for call in segmenter.calls)
+
+
+def test_a_fresh_checkout_is_not_mistaken_for_a_stale_graded_copy(placeholder_repo):
+    # Git writes <id>.graded.png just before <id>.png, so the master looks a moment newer.
+    age(placeholder_repo.graded("prison-yard"), 1)
+    assert run(placeholder_repo)[0] == 0
+
+
+def test_all_redoes_a_scene_whose_graded_copy_changed(placeholder_repo):
+    assert run(placeholder_repo)[0] == 0
+    Image.new("RGB", (2048, 1152), (30, 40, 90)).save(placeholder_repo.graded("prison-yard"))
+    segmenter = FakeSegmenter([[hoop()]])
+    code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
+    assert code == 0, out
+    assert "prison-yard: its master or graded copy has changed" in out
+    assert len(segmenter.calls) == 10
+
+
+# --- an outline Claude accepts but the hotspot rules do not -------------------------------------
+
+
+def tiny() -> Candidate:
+    """Exactly the object, but far too small to click: under the 1.5% area floor."""
+    polygon = [(0.6, 0.4), (0.63, 0.4), (0.63, 0.43), (0.6, 0.43)]
+    return Candidate(polygon, geometry.bbox(polygon), "basketball hoop")
+
+
+def test_a_verified_outline_that_breaks_the_rules_is_not_kept(placeholder_repo):
+    assert run(placeholder_repo)[0] == 0  # a good, verified hotspot first
+    good = bridge(placeholder_repo)
+    mask_good = placeholder_repo.mask("prison-yard").read_bytes()
+    code, out = run(placeholder_repo, segmenter=FakeSegmenter([[tiny()]]))
+    assert code == 1
+    assert "the verified outline breaks a hotspot rule: hotspot covers" in out
+    assert "not kept: the outline stays as it was and the scene is marked unverified" in out
+    assert "0 verified" in out
+    assert "1 verified but not kept because they break the hotspot rules" in out
+    after = bridge(placeholder_repo)
+    assert after.polygon == good.polygon and after.area == good.area
+    assert not after.verified and after.needs_manual_hotspot
+    assert after.verification.startswith(
+        "Claude accepted the new outline, but it was not kept because it breaks the hotspot rules"
+    )
+    assert after.verified_master_sha256 is None and after.verified_image_sha256 is None
+    assert placeholder_repo.mask("prison-yard").read_bytes() == mask_good
+    record = json.loads((placeholder_repo.review_dir("prison-yard") / "hotspot.json").read_text())
+    assert record["verified"] is True and record["kept"] is False
+    assert record["not_kept_because"][0].startswith("hotspot covers")
+    result = validate_repo(placeholder_repo)
+    assert result.errors == []
+
+
+def test_a_dry_run_reports_an_outline_that_would_not_be_kept(placeholder_repo):
+    lines: list[str] = []
+    code = run_hotspot_command(
+        placeholder_repo,
+        scene="prison-yard",
+        all_scenes=False,
+        box=None,
+        dry_run=True,
+        echo=lines.append,
+        segmenter=FakeSegmenter([[tiny()]]),
+        verifier=FakeVerifier([Verdict(matches=True, reason="The hoop.")]),
+    )
+    out = "\n".join(lines)
+    assert code == 1
+    assert "1 verified but not kept because they break the hotspot rules" in out

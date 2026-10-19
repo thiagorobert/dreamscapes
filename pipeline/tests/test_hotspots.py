@@ -14,6 +14,7 @@ from PIL import Image
 
 from dreamscapes_pipeline import genlog, geometry, hotspots
 from dreamscapes_pipeline.hotspots import (
+    READING_TIE_MARGIN,
     CallLog,
     Candidate,
     ClaudeVerifier,
@@ -37,9 +38,11 @@ from dreamscapes_pipeline.hotspots import (
     gemini_candidate,
     gemini_mask_to_polygon,
     mask_to_polygon,
+    order_is_ambiguous,
     parse_gemini_masks,
     parse_verdict,
     rasterize,
+    reading_report,
     render_closeup,
     render_overlay,
     score_mask_readings,
@@ -547,7 +550,10 @@ def test_first_attempt_verified(scene_image):
     assert updates["verified"] is True and updates["needs_manual_hotspot"] is False
     assert updates["verification"] == "The hoop."
     assert updates["verified_master_sha256"] is None  # no master hash was passed in
-    assert bridge_updates(result, "gemini", "ab" * 32)["verified_master_sha256"] == "ab" * 32
+    recorded = bridge_updates(result, "gemini", "ab" * 32, "assets/x.graded.png", "cd" * 32)
+    assert recorded["verified_master_sha256"] == "ab" * 32
+    assert recorded["verified_image"] == "assets/x.graded.png"
+    assert recorded["verified_image_sha256"] == "cd" * 32
     assert updates["score"] is None  # Gemini reports no confidence: the field is removed
     assert updates["area"] == pytest.approx(geometry.area(updates["polygon"]), abs=1e-6)
     assert updates["centroid"] == pytest.approx(geometry.centroid(updates["polygon"]), abs=1e-6)
@@ -570,7 +576,14 @@ def test_retry_uses_the_box_claude_suggests(scene_image):
 
 
 # A failed run only flags the scene; the master hash goes with the verification it belonged to.
-FLAG_ONLY = {"verified", "verification", "verified_master_sha256", "needs_manual_hotspot"}
+FLAG_ONLY = {
+    "verified",
+    "verification",
+    "verified_master_sha256",
+    "verified_image",
+    "verified_image_sha256",
+    "needs_manual_hotspot",
+}
 
 
 def test_a_no_without_a_new_box_goes_straight_to_manual_work(scene_image):
@@ -623,6 +636,8 @@ def test_nothing_found_keeps_the_existing_polygon(scene_image):
         "verified": False,
         "verification": result.verification_text(),
         "verified_master_sha256": None,
+        "verified_image": None,
+        "verified_image_sha256": None,
         "needs_manual_hotspot": True,
     }
 
@@ -808,3 +823,71 @@ def test_an_unreadable_verdict_is_logged_as_an_error_with_its_cost(tmp_path, sce
     assert verify["status"] == "error" and verify["error"].startswith("VerificationError")
     assert verify["matches"] is None
     assert verify["cost_usd"] == pytest.approx((3000 * 4 + 500 * 20) / 1e6)
+
+
+def test_answers_without_usage_are_logged_with_a_null_cost(tmp_path, scene_image):
+    # The rest of the log writes null for an unknown cost, and genlog.total_spend counts the
+    # estimate for such a row; a 0.0 here would make the call look free.
+    class NoUsage:
+        def create(self, **_kwargs):
+            return SimpleNamespace(output_text=HOOP_RESPONSE, usage=None, id="interaction-9")
+
+    segmenter = GeminiSegmenter(client=SimpleNamespace(interactions=NoUsage()))
+    yes = claude_response(YES)
+    yes.usage = None
+    client, _ = fake_claude(yes)
+    log = call_log(tmp_path, scene_image)
+    spend = Spend(cap_usd=1.0)
+    extract_hotspot(
+        scene_image,
+        "hoop",
+        segmenter,
+        ClaudeVerifier(client),
+        image_size=(W, H),
+        spend=spend,
+        log=log,
+    )
+    segment, verify = genlog.read_rows(log.path)
+    assert segment["usage"] is None and segment["cost_usd"] is None
+    assert verify["usage"] is None and verify["cost_usd"] is None
+    assert segmenter.last_cost_usd is None
+    # The spend guard and the log both fall back to the estimates.
+    assert spend.spent_usd == pytest.approx(0.01 + 0.09)
+    assert genlog.total_spend([segment, verify]) == pytest.approx(0.01 + 0.09)
+
+
+# --- when the box cannot tell the point order apart -------------------------------------------
+
+# An L shape inside a square box that straddles the diagonal x = y: the shape and its mirror
+# image across that diagonal both fill the box equally well.
+SQUARE_BOX = [400, 400, 600, 600]
+L_IN_SQUARE = [[420, 420], [580, 420], [580, 500], [500, 500], [500, 580], [420, 580]]
+
+
+def test_a_box_on_the_diagonal_makes_the_order_ambiguous():
+    entry = parse_gemini_masks(json.dumps([{"box_2d": SQUARE_BOX, "mask": L_IN_SQUARE}]))[0]
+    candidate = gemini_candidate(entry)
+    totals = {s.reading: s.total for s in candidate.readings}
+    assert totals["xy-image"] == pytest.approx(totals["yx-image"])
+    assert abs(totals["xy-image"] - totals["yx-image"]) <= READING_TIE_MARGIN
+    assert candidate.reading.reading == "xy-image"  # the tie rule
+    assert order_is_ambiguous(candidate.readings)
+    lines = reading_report(candidate)
+    assert any(
+        line.startswith("warning: [x, y] and [y, x] fit the box equally well (0.64 and 0.64)")
+        for line in lines
+    )
+
+
+def test_an_order_the_box_settles_is_not_called_ambiguous():
+    # A tall box well off the diagonal: only one order fits.
+    entry = parse_gemini_masks(
+        json.dumps([{"box_2d": [200, 100, 600, 500], "mask": [[110, 210], [490, 220], [480, 590]]}])
+    )[0]
+    candidate = gemini_candidate(entry)
+    assert not order_is_ambiguous(candidate.readings)
+    assert not any("equally well" in line for line in reading_report(candidate))
+    # Low scores that happen to tie (a slender outline in a loose box) are not flagged either.
+    lighthouse = [[480, 150], [520, 150], [530, 900], [470, 900]]
+    loose = parse_gemini_masks(json.dumps([{"box_2d": [100, 100, 950, 900], "mask": lighthouse}]))
+    assert not order_is_ambiguous(gemini_candidate(loose[0]).readings)
