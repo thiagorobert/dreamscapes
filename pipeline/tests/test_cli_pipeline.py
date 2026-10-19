@@ -12,7 +12,7 @@ from dreamscapes_pipeline.cli import app
 from dreamscapes_pipeline.layout import MASTER_HEIGHT, MASTER_WIDTH
 from dreamscapes_pipeline.manifest import load_manifest
 from tests.conftest import file_hashes
-from tests.fakes import FakeAnthropicClient, offline, write_style  # noqa: F401
+from tests.fakes import MASTER_SIZE, FakeAnthropicClient, offline, write_style  # noqa: F401
 from tests.test_cli import plain_help
 
 runner = CliRunner()
@@ -35,6 +35,7 @@ def test_help_shows_the_new_options():
     assert "--size" in plain_help(["generate", "--help"])
     assert "--quality" in plain_help(["generate", "--help"])
     assert "--check" in plain_help(["export", "--help"])
+    assert "--allow-upscale" in plain_help(["select", "--help"])
     assert "--candidates" in plain_help(["bakeoff", "--help"])
 
 
@@ -51,11 +52,13 @@ def test_generate_dry_run_prints_the_exact_gemini_request(in_placeholder_repo):
     assert not in_placeholder_repo.candidates.exists()
 
 
-def test_generate_all_puts_the_style_anchor_first(in_placeholder_repo):
+def test_generate_all_on_a_fresh_checkout_plans_only_the_anchor(in_placeholder_repo):
     result = runner.invoke(app, ["generate", "--all", "--candidates", "1", "--dry-run"])
     assert result.exit_code == 0, result.output
-    assert result.output.index("cliff-cottage cand-1") < result.output.index("prison-yard cand-1")
-    assert result.output.count("a real run would refuse") == 9
+    assert "cliff-cottage cand-1" in result.output and "request 1 of 1" in result.output
+    assert "prison-yard cand-1" not in result.output
+    assert "skipped 9 scene(s) until the style anchor is ready" in result.output
+    assert "dsp select --scene cliff-cottage" in result.output
 
 
 def test_generate_openai_dry_run_with_size_and_quality(in_placeholder_repo):
@@ -102,7 +105,7 @@ def test_real_generate_without_a_key_stops_without_logging(in_small_repo):
 
 
 def test_generate_then_select_end_to_end(in_small_repo, monkeypatch):
-    fake = providers.FakeImageProvider(image_size=(512, 288))
+    fake = providers.FakeImageProvider(image_size=MASTER_SIZE)
     monkeypatch.setattr(providers, "make_image_provider", lambda *a, **k: fake)
     client = FakeAnthropicClient(best=2)
     monkeypatch.setattr(

@@ -34,11 +34,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from . import genlog
 from .generate import StyleBlockError, existing_candidates, load_style_block
-from .imaging import jpeg_preview, master_png_from, sha256_file, write_if_changed
+from .imaging import (
+    image_size,
+    jpeg_preview,
+    master_png_from,
+    sha256_file,
+    upscale_needed,
+    write_if_changed,
+)
 from .layout import RepoPaths
 from .manifest import Generation, Manifest, Scene, dump_manifest, save_manifest
 from .placeholders import is_placeholder_image
@@ -118,9 +126,16 @@ def weighted_total(score: CandidateScore) -> float:
 
 
 def fail_reasons(score: CandidateScore) -> list[str]:
+    """Hard fails. The two bridge-object answers must agree: "present" with a score of 0, or
+    "missing" with a positive score, means the judge contradicted itself, and an inconsistent
+    verdict must not choose a master."""
     reasons = []
     if not score.bridge_object_present:
         reasons.append("bridge object missing")
+        if score.bridge_object > 0:
+            reasons.append("bridge object answers disagree")
+    elif score.bridge_object == 0:
+        reasons.append("bridge object answers disagree")
     if score.has_text_or_logos:
         reasons.append("text or logos")
     if score.has_people_or_faces:
@@ -172,22 +187,44 @@ class ScoringJob:
     purpose: str = "select"
     _images: list[JudgeImage] | None = None
 
-    def images(self) -> list[JudgeImage]:
-        """The anchor (if any) and every candidate, downscaled once and cached."""
-        if self._images is None:
-            from PIL import Image
+    def _entries(self) -> list[tuple[str, Path]]:
+        entries = [("Style anchor", self.anchor)] if self.anchor is not None else []
+        return entries + [(f"Candidate {n}", path) for n, path in self.candidates]
 
+    def images(self) -> list[JudgeImage]:
+        """The anchor (if any) and every candidate, downscaled once and cached until
+        `set_anchor` changes the anchor."""
+        if self._images is None:
             images = []
-            entries = [("Style anchor", self.anchor)] if self.anchor else []
-            entries += [(f"Candidate {n}", path) for n, path in self.candidates]
-            for label, path in entries:
-                assert path is not None
+            for label, path in self._entries():
                 jpeg = jpeg_preview(path, JUDGE_IMAGE_WIDTH)
                 with Image.open(io.BytesIO(jpeg)) as preview:
                     size = preview.size
                 images.append(JudgeImage(label, path, sha256_file(path), jpeg, size))
             self._images = images
         return self._images
+
+    def set_anchor(self, anchor: Path | None) -> None:
+        """Point the job at the anchor as it is now and drop any cached previews."""
+        self.anchor = anchor
+        self._images = None
+
+    def preview_sizes(self, *, assume_anchor: bool = False) -> list[tuple[int, int]]:
+        """Sizes the previews will have, read from file headers; nothing is encoded or cached.
+
+        ``assume_anchor`` counts an anchor image even when none exists yet, for estimates made
+        before the anchor scene is selected in the same run.
+        """
+        sizes = []
+        for _, path in self._entries():
+            with Image.open(path) as opened:
+                w, h = opened.size
+            if w > JUDGE_IMAGE_WIDTH:
+                w, h = JUDGE_IMAGE_WIDTH, round(h * JUDGE_IMAGE_WIDTH / w)
+            sizes.append((w, h))
+        if assume_anchor and self.anchor is None:
+            sizes.append((JUDGE_IMAGE_WIDTH, round(JUDGE_IMAGE_WIDTH * 9 / 16)))
+        return sizes
 
     def instructions(self) -> str:
         reference = (
@@ -299,8 +336,9 @@ class ClaudeJudge:
             "messages": [{"role": "user", "content": self._content(job, describe=describe)}],
         }
 
-    def estimate_cost(self, job: ScoringJob) -> float:
-        image_tokens = sum(w * h / 750 for w, h in (img.size for img in job.images()))
+    def estimate_cost(self, job: ScoringJob, *, assume_anchor: bool = False) -> float:
+        sizes = job.preview_sizes(assume_anchor=assume_anchor)
+        image_tokens = sum(w * h / 750 for w, h in sizes)
         text_tokens = (len(SYSTEM_PROMPT) + len(job.instructions())) / 3.5
         output = EXPECTED_OUTPUT_TOKENS + OUTPUT_TOKENS_PER_CANDIDATE * len(job.candidates)
         price_in, price_out = PRICES.get(self.model, PRICES["claude-opus-5"])
@@ -327,13 +365,21 @@ class ClaudeJudge:
         return self._parse(message, job, estimate)
 
     def _parse(self, message: Any, job: ScoringJob, estimate: float) -> ScoringResult:
+        # Usage first: an answer that turns out unusable was still billed.
+        usage = _usage_dict(getattr(message, "usage", None))
+        served = str(getattr(message, "model", None) or self.model)
+        cost = _cost(served, usage)
         stop = getattr(message, "stop_reason", None)
         if stop == "refusal":
             details = getattr(message, "stop_details", None)
             category = getattr(details, "category", None) if details else None
-            raise ScoringError(f"Claude declined to score (category: {category or 'unknown'})")
+            raise ScoringError(
+                f"Claude declined to score (category: {category or 'unknown'})", cost_usd=cost
+            )
         if stop == "max_tokens":
-            raise ScoringError("Claude ran out of output tokens before finishing the scores")
+            raise ScoringError(
+                "Claude ran out of output tokens before finishing the scores", cost_usd=cost
+            )
         blocks = list(getattr(message, "content", None) or [])
         last_fallback = max(
             (i for i, b in enumerate(blocks) if getattr(b, "type", None) == "fallback"),
@@ -345,13 +391,15 @@ class ClaudeJudge:
         try:
             sheet = ScoreSheet.model_validate_json(text)
         except ValidationError as error:
-            raise ScoringError(f"Claude's score sheet did not validate: {error}") from error
+            raise ScoringError(
+                f"Claude's score sheet did not validate: {error}", cost_usd=cost
+            ) from error
         expected = sorted(n for n, _ in job.candidates)
         got = sorted(s.candidate for s in sheet.candidates)
         if got != expected:
-            raise ScoringError(f"Claude scored candidates {got}, expected exactly {expected}")
-        usage = _usage_dict(getattr(message, "usage", None))
-        served = str(getattr(message, "model", None) or self.model)
+            raise ScoringError(
+                f"Claude scored candidates {got}, expected exactly {expected}", cost_usd=cost
+            )
         return ScoringResult(
             sheet=sheet,
             model=self.model,
@@ -360,7 +408,7 @@ class ClaudeJudge:
             response_id=getattr(message, "id", None),
             usage=usage,
             cost_estimate_usd=estimate,
-            cost_usd=_cost(served, usage),
+            cost_usd=cost,
         )
 
 
@@ -591,10 +639,12 @@ def score_with_log(
         row.update(
             status="error",
             error=str(error),
-            cost_usd=None,
+            cost_usd=error.cost_usd,
             duration_s=round(time.monotonic() - started, 2),
         )
         genlog.append_row(paths.generation_log, row)
+        if error.cost_usd:
+            guard.record(f"scoring {job.scene_id} (unusable answer)", error.cost_usd)
         raise
     row.update(
         status="ok",
@@ -630,9 +680,25 @@ def adopt_candidate(
     candidate: Path,
     rows: list[dict[str, Any]],
     *,
+    allow_upscale: bool = False,
     echo: Echo = print,
-) -> None:
-    """Record the choice in the manifest and copy the candidate to the master at master size."""
+) -> bool:
+    """Record the choice in the manifest and copy the candidate to the master at master size.
+
+    A candidate smaller than the master would have to be enlarged, which leaves a soft master
+    (for example after `dsp generate --size 1K`). That is refused unless ``allow_upscale``, and
+    loudly flagged when allowed. Returns False when the candidate was refused.
+    """
+    w, h = image_size(candidate)
+    if upscale_needed((w, h)):
+        problem = (
+            f"cand-{number} is {w}x{h}, smaller than the 2048x1152 master; making it the master "
+            "would enlarge it and soften the image"
+        )
+        if not allow_upscale:
+            echo(f"  error: {problem}. Generate at the default 2K size, or pass --allow-upscale.")
+            return False
+        echo(f"  WARNING: {problem}. Adopting it anyway because --allow-upscale was given.")
     sha = sha256_file(candidate)
     image_row = genlog.find_image_row(rows, scene.id, number, sha)
     log_ids: list[str] = []
@@ -656,6 +722,25 @@ def adopt_candidate(
         echo(f"  copied cand-{number} to {_rel(paths, paths.master(scene.id))}")
     else:
         echo(f"  {_rel(paths, paths.master(scene.id))} already holds cand-{number}")
+    return True
+
+
+def _anchor_master_may_change(
+    paths: RepoPaths, anchor_job: ScoringJob | None, repick: bool
+) -> bool:
+    """Whether selecting the anchor scene in this run could replace the anchor master, in which
+    case every other scene must be judged (again) against the new one."""
+    if anchor_job is None:
+        return False
+    document = None if repick else cached_scores(paths, anchor_job)
+    if document is None:
+        return True
+    winner = document.get("winner")
+    if winner is None:
+        return False
+    master = paths.master(anchor_job.scene_id)
+    candidate = dict(anchor_job.candidates)[winner]
+    return not master.exists() or master.read_bytes() != master_png_from(candidate)
 
 
 def run_select(
@@ -665,6 +750,7 @@ def run_select(
     *,
     judge: ClaudeJudge | None = None,
     repick: bool = False,
+    allow_upscale: bool = False,
     dry_run: bool = False,
     guard: SpendGuard | None = None,
     echo: Echo = print,
@@ -675,14 +761,18 @@ def run_select(
     judge = judge or make_judge(paths.root)
     by_id = manifest.by_id()
     before = dump_manifest(manifest)
-    rows = genlog.read_rows(paths.generation_log)
     outcome = SelectOutcome()
-
     try:
+        rows = genlog.read_rows(paths.generation_log)
         style_block = load_style_block(paths, allow_draft=dry_run).text
-    except StyleBlockError as error:
+    except (StyleBlockError, ValueError) as error:
         echo(f"error: {error}")
         return 1
+
+    # The anchor scene goes first: its master is what every other scene is judged against.
+    anchor_id = manifest.style_anchor
+    if anchor_id in scene_ids:
+        scene_ids = [anchor_id, *[s for s in scene_ids if s != anchor_id]]
 
     jobs: list[ScoringJob] = []
     for scene_id in scene_ids:
@@ -703,26 +793,64 @@ def run_select(
                 echo(f"{scene_id}: pinned to cand-{pinned}; would copy it to the master")
                 continue
             echo(f"{scene_id}: pinned to cand-{pinned} (use --repick to score again)")
-            adopt_candidate(paths, scene, pinned, available[pinned], rows, echo=echo)
-            outcome.selected[scene_id] = pinned
+            if adopt_candidate(
+                paths,
+                scene,
+                pinned,
+                available[pinned],
+                rows,
+                allow_upscale=allow_upscale,
+                echo=echo,
+            ):
+                outcome.selected[scene_id] = pinned
+            else:
+                outcome.failed.append(scene_id)
             write_contact_sheet(paths, manifest, scene_id)
             continue
+        small = [n for n, path in candidates if upscale_needed(image_size(path))]
+        if small and not allow_upscale:
+            if len(small) == len(candidates):
+                echo(
+                    f"{scene_id}: every candidate is smaller than the 2048x1152 master, so none "
+                    "could become the master; not scoring. Generate at the default 2K size, or "
+                    "pass --allow-upscale."
+                )
+                outcome.failed.append(scene_id)
+                continue
+            listed = ", ".join(f"cand-{n}" for n in small)
+            echo(f"{scene_id}: warning: {listed} would need enlarging and cannot be adopted")
         jobs.append(build_job(paths, manifest, scene, style_block))
 
-    to_score = [job for job in jobs if repick or cached_scores(paths, job) is None]
-    scoring_ids = {job.scene_id for job in to_score}
-    estimate = sum(judge.estimate_cost(job) for job in to_score)
+    anchor_job = next((job for job in jobs if job.scene_id == anchor_id), None)
+    anchor_changes = _anchor_master_may_change(paths, anchor_job, repick)
+
+    def follows_new_anchor(job: ScoringJob) -> bool:
+        return anchor_changes and job is not anchor_job
+
+    # The plan-wide estimate reads only image sizes; the previews and the anchor each job is
+    # judged against are resolved just before that job is scored, after any anchor change.
+    planned = [
+        job
+        for job in jobs
+        if repick or follows_new_anchor(job) or cached_scores(paths, job) is None
+    ]
+    planned_ids = {job.scene_id for job in planned}
+    estimate = sum(
+        judge.estimate_cost(job, assume_anchor=follows_new_anchor(job)) for job in planned
+    )
     guard = guard or SpendGuard.from_env()
-    description = f"scoring {len(to_score)} scene(s) with {judge.model}"
+    description = f"scoring {len(planned)} scene(s) with {judge.model}"
 
     if dry_run:
-        for job in to_score:
+        for job in planned:
             echo(f"request for {job.scene_id} (estimated ${judge.estimate_cost(job):.3f}):")
+            if follows_new_anchor(job):
+                echo(f"  note: the anchor selected for '{anchor_id}' earlier in the run is used")
             echo(json.dumps(judge.request(job, describe=True), indent=2, ensure_ascii=False))
         for job in jobs:
-            if job.scene_id not in scoring_ids:
+            if job.scene_id not in planned_ids:
                 echo(f"{job.scene_id}: scores.json is current; it would be reused")
-        if to_score:
+        if planned:
             try:
                 echo(guard.check_plan(estimate, description))
             except SpendLimitExceeded as error:
@@ -730,17 +858,20 @@ def run_select(
         echo("dry run: nothing was sent")
         return 1 if outcome.failed else 0
 
-    if to_score:
+    if planned:
         try:
             echo(guard.check_plan(estimate, description))
         except SpendLimitExceeded as error:
             echo(f"error: {error}")
             return 1
 
+    scored_any = False
     for job in jobs:
         scene = by_id[job.scene_id]
-        document = None if job.scene_id in scoring_ids else cached_scores(paths, job)
+        job.set_anchor(judge_anchor(paths, manifest, job.scene_id))
+        document = None if repick else cached_scores(paths, job)
         if document is None:
+            scored_any = True
             try:
                 result, log_id = score_with_log(paths, judge, job, guard, echo=echo, sleep=sleep)
             except SpendLimitExceeded as error:
@@ -765,8 +896,18 @@ def run_select(
             outcome.failed.append(job.scene_id)
         else:
             echo(f"{job.scene_id}: selected cand-{winner}")
-            adopt_candidate(paths, scene, winner, dict(job.candidates)[winner], rows, echo=echo)
-            outcome.selected[job.scene_id] = winner
+            if adopt_candidate(
+                paths,
+                scene,
+                winner,
+                dict(job.candidates)[winner],
+                rows,
+                allow_upscale=allow_upscale,
+                echo=echo,
+            ):
+                outcome.selected[job.scene_id] = winner
+            else:
+                outcome.failed.append(job.scene_id)
         # Rendered after the choice is recorded, so the sheet marks the selected candidate.
         sheet_path = write_contact_sheet(paths, manifest, job.scene_id)
         echo(f"  contact sheet: {_rel(paths, sheet_path)}")
@@ -777,4 +918,6 @@ def run_select(
         echo("updated content/scenes.yaml")
     if outcome.selected:
         echo("next: run `dsp grade` to grade the new masters")
+    if scored_any:
+        echo(genlog.spend_summary(paths.generation_log))
     return 1 if outcome.failed else 0

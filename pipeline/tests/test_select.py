@@ -12,12 +12,13 @@ from PIL import Image
 
 from dreamscapes_pipeline import genlog
 from dreamscapes_pipeline.generate import run_generate
-from dreamscapes_pipeline.imaging import master_png_from, sha256_file
+from dreamscapes_pipeline.imaging import jpeg_preview, master_png_from, sha256_file
 from dreamscapes_pipeline.layout import MASTER_HEIGHT, MASTER_WIDTH
 from dreamscapes_pipeline.manifest import Generation, load_manifest, save_manifest
 from dreamscapes_pipeline.providers import FakeImageProvider
 from dreamscapes_pipeline.select import (
     FALLBACK_BETA,
+    JUDGE_IMAGE_WIDTH,
     JUDGE_MODEL,
     WEIGHTS,
     ClaudeJudge,
@@ -28,6 +29,7 @@ from dreamscapes_pipeline.select import (
 )
 from dreamscapes_pipeline.spend import SpendGuard
 from tests.fakes import (  # noqa: F401
+    MASTER_SIZE,
     FakeAnthropicClient,
     message,
     offline,
@@ -44,7 +46,7 @@ def _generate(paths, scene_id, count=3):
         paths,
         manifest,
         [scene_id],
-        FakeImageProvider(image_size=(320, 180)),
+        FakeImageProvider(image_size=MASTER_SIZE),
         count=count,
         guard=SpendGuard(),
         echo=lambda _: None,
@@ -235,7 +237,11 @@ def test_hard_fails_cannot_win(small_repo):
     scores = json.loads(scores_path(small_repo, "second-scene").read_text())
     assert scores["winner"] == 3
     verdicts = {c["candidate"]: c["fail_reasons"] for c in scores["candidates"]}
-    assert verdicts == {1: ["people or faces"], 2: ["bridge object missing"], 3: []}
+    assert verdicts == {
+        1: ["people or faces"],
+        2: ["bridge object missing", "bridge object answers disagree"],
+        3: [],
+    }
 
 
 def test_when_nothing_passes_no_master_or_yaml_changes(small_repo):
@@ -281,14 +287,18 @@ def test_unusable_answers_are_errors(small_repo, reply, problem):
     assert not caught.value.retryable
 
 
-def test_a_failed_scoring_call_is_logged(small_repo):
+def test_a_failed_scoring_call_is_logged_and_charged(small_repo):
     _generate(small_repo, "second-scene", count=1)
     refusal = message("", stop_reason="refusal")
-    assert (
-        _select(small_repo, ["second-scene"], FakeAnthropicClient(respond=lambda _: refusal)) == 1
-    )
+    guard = SpendGuard(limit=15)
+    client = FakeAnthropicClient(respond=lambda _: refusal)
+    assert _select(small_repo, ["second-scene"], client, guard=guard) == 1
     row = genlog.read_rows(small_repo.generation_log)[-1]
     assert row["kind"] == "score" and row["status"] == "error" and "declined" in row["error"]
+    # The refusal reported usage, so it is charged like any other answer.
+    expected = (9000 * 4 + 2000 * 20) / 1e6
+    assert row["cost_usd"] == pytest.approx(expected)
+    assert guard.spent == pytest.approx(expected)
 
 
 def test_a_fallback_answer_is_read_after_the_fallback_block(small_repo):
@@ -358,3 +368,120 @@ def test_missing_candidates_and_missing_key(small_repo):
         sleep=lambda _: None,
     )
     assert code == 1 and any("ANTHROPIC_API_KEY is not set" in line for line in lines)
+
+
+# --------------------------------------------------------------------------------------------
+# The anchor chosen in a run is the one every later scene in that run is judged against
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "order", [["first-scene", "second-scene"], ["second-scene", "first-scene"]], ids=str
+)
+def test_scenes_are_judged_against_the_anchor_adopted_earlier_in_the_same_run(small_repo, order):
+    _generate(small_repo, "first-scene", count=2)
+    _generate(small_repo, "second-scene", count=2)
+    old_anchor = sha256_file(small_repo.master("first-scene"))
+    client = FakeAnthropicClient(best=2)
+    assert _select(small_repo, order, client) == 0
+    assert [_labels(call)[0] for call in client.calls] == ["Candidate 1:", "Style anchor:"]
+
+    new_anchor = sha256_file(small_repo.master("first-scene"))
+    assert new_anchor != old_anchor, "the anchor scene's winner replaced its master"
+    scores = json.loads(scores_path(small_repo, "second-scene").read_text())
+    assert scores["anchor"]["sha256"] == new_anchor
+    shown = base64.b64decode(client.calls[1]["messages"][0]["content"][1]["source"]["data"])
+    assert shown == jpeg_preview(small_repo.master("first-scene"), JUDGE_IMAGE_WIDTH)
+
+    # With the pins cleared, nothing changed, so a second run pays for nothing.
+    manifest = load_manifest(small_repo.scenes_yaml)
+    for scene_id in ("first-scene", "second-scene"):
+        manifest.scene(scene_id).generation = None
+    save_manifest(manifest, small_repo.scenes_yaml)
+    lines: list[str] = []
+    assert _select(small_repo, order, client, lines) == 0
+    assert len(client.calls) == 2
+    assert sum("reusing scores.json" in line for line in lines) == 2
+
+
+def test_estimates_read_sizes_without_encoding_or_caching(small_repo):
+    write_candidates(small_repo, "second-scene", 2)
+    manifest = load_manifest(small_repo.scenes_yaml)
+    job = build_job(small_repo, manifest, manifest.scene("second-scene"), "STYLE")
+    judge = ClaudeJudge()
+    with_anchor = judge.estimate_cost(job)
+    assert job._images is None
+    assert judge.estimate_cost(job, assume_anchor=True) == with_anchor
+    job.set_anchor(None)
+    assert judge.estimate_cost(job) < with_anchor
+    assert judge.estimate_cost(job, assume_anchor=True) == pytest.approx(with_anchor, abs=0.002)
+
+
+# --------------------------------------------------------------------------------------------
+# Small winners, contradictory verdicts and a corrupt log
+# --------------------------------------------------------------------------------------------
+
+
+def test_a_winner_smaller_than_the_master_is_refused_unless_allowed(small_repo):
+    from dreamscapes_pipeline.providers.base import synthetic_png
+
+    write_style(small_repo)
+    write_candidates(small_repo, "second-scene", 1)
+    small = small_repo.candidate_dir("second-scene") / "cand-2.png"
+    small.write_bytes(synthetic_png("small", (1376, 768)))
+    master_before = small_repo.master("second-scene").read_bytes()
+    client = FakeAnthropicClient(best=2)
+
+    lines: list[str] = []
+    assert _select(small_repo, ["second-scene"], client, lines) == 1
+    assert len(client.calls) == 1
+    assert any("warning: cand-2 would need enlarging" in line for line in lines)
+    assert any("cand-2 is 1376x768" in line and "--allow-upscale" in line for line in lines)
+    assert small_repo.master("second-scene").read_bytes() == master_before
+    assert load_manifest(small_repo.scenes_yaml).scene("second-scene").generation is None
+
+    lines.clear()
+    assert _select(small_repo, ["second-scene"], client, lines, allow_upscale=True) == 0
+    assert len(client.calls) == 1, "the stored scores are reused"
+    assert any("WARNING: cand-2 is 1376x768" in line for line in lines)
+    assert small_repo.master("second-scene").read_bytes() == master_png_from(small)
+
+
+def test_when_every_candidate_is_too_small_nothing_is_scored(small_repo):
+    write_style(small_repo)
+    write_candidates(small_repo, "second-scene", 2, size=(1280, 720))
+    client = FakeAnthropicClient()
+    lines: list[str] = []
+    assert _select(small_repo, ["second-scene"], client, lines) == 1
+    assert client.calls == []
+    assert any("every candidate is smaller than the 2048x1152 master" in line for line in lines)
+
+
+@pytest.mark.parametrize(
+    ("fields", "reasons"),
+    [
+        ({"bridge_object": 0}, ["bridge object answers disagree"]),
+        (
+            {"bridge_object_present": False, "bridge_object": 4},
+            ["bridge object missing", "bridge object answers disagree"],
+        ),
+        ({"bridge_object_present": False, "bridge_object": 0}, ["bridge object missing"]),
+        ({}, []),
+    ],
+)
+def test_bridge_object_answers_must_agree(fields, reasons):
+    from dreamscapes_pipeline.select import CandidateScore, fail_reasons
+
+    assert fail_reasons(CandidateScore(**score_entry(1, **fields))) == reasons
+
+
+def test_a_corrupt_generation_log_is_reported(small_repo):
+    write_style(small_repo)
+    write_candidates(small_repo, "second-scene", 1)
+    small_repo.generation_log.parent.mkdir(parents=True, exist_ok=True)
+    small_repo.generation_log.write_text("{broken\n")
+    client = FakeAnthropicClient()
+    lines: list[str] = []
+    assert _select(small_repo, ["second-scene"], client, lines) == 1
+    assert client.calls == []
+    assert any("not valid JSON" in line for line in lines)

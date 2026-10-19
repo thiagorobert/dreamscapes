@@ -267,6 +267,13 @@ def select(
         bool, typer.Option("--repick", help="Re-score even when a candidate is already pinned.")
     ] = False,
     dry_run: DryRunOpt = False,
+    allow_upscale: Annotated[
+        bool,
+        typer.Option(
+            "--allow-upscale",
+            help="Accept a winner smaller than 2048x1152 and enlarge it into a (softer) master.",
+        ),
+    ] = False,
 ) -> None:
     """Have Claude score the candidates, write a contact sheet and copy the winner to masters."""
     from . import select as selection
@@ -281,6 +288,7 @@ def select(
         scene_ids,
         judge=selection.make_judge(paths.root),
         repick=repick,
+        allow_upscale=allow_upscale,
         dry_run=dry_run,
         guard=guard,
         echo=typer.echo,

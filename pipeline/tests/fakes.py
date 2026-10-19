@@ -21,6 +21,8 @@ from PIL import Image
 from dreamscapes_pipeline.layout import MASTER_HEIGHT, MASTER_WIDTH, RepoPaths
 from dreamscapes_pipeline.providers.base import synthetic_png
 
+MASTER_SIZE = (MASTER_WIDTH, MASTER_HEIGHT)
+
 KEY_VARS = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
@@ -63,7 +65,7 @@ def write_master(paths: RepoPaths, scene_id: str, colour: tuple[int, int, int]) 
 
 
 def write_candidates(
-    paths: RepoPaths, scene_id: str, count: int, size: tuple[int, int] = (320, 180)
+    paths: RepoPaths, scene_id: str, count: int, size: tuple[int, int] = MASTER_SIZE
 ) -> list[Path]:
     folder = paths.candidate_dir(scene_id)
     folder.mkdir(parents=True, exist_ok=True)
