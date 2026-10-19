@@ -76,7 +76,9 @@
         "lqip": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAADwBACdASogABIAPu1qr1AppiSiqAqpMB2JZwDDrA7pkvtBzBvBifSUAnO3zgvTaAAAx0x0FOZQaJg48G8juCy56TjitDP3GmLMIFdVV7gABMmVr8z4iw/qiLxYDERniMigAA=="
       },
       "transition": {
-        "type": "zoom"
+        "type": "video",
+        "video": "morphs/cliff-cottage__prison-yard.7e1b84b3.mp4",
+        "duration": 8.0
       }
     },
     {
@@ -163,7 +165,9 @@
         "lqip": "data:image/webp;base64,UklGRmIAAABXRUJQVlA4IFYAAADwBACdASogABIAPuleo02pJSMiMAwBIB0JZwC7AB6SFKPtc8lVBV3xk4XjramgJNgA/rm78OMAET0v9tVBPIF0lJClLGZAFVAI29EaQD7QWrrAxwQAAA=="
       },
       "transition": {
-        "type": "zoom"
+        "type": "video",
+        "video": "morphs/prison-yard__rooftop-court.2c0d9334.mp4",
+        "duration": 8.0
       }
     },
     {
@@ -254,7 +258,9 @@
         "lqip": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAABQBACdASogABIAPuVgpE2pJaMiMAwBIByJZwDDcB4XJ1NQAW8PZtqgv6oAAP6rXRXtZ+bajye7r2QMvtDE92j3xL1jntpr7wkeF95wcHSycddB1CMSW8rIAAA="
       },
       "transition": {
-        "type": "zoom"
+        "type": "video",
+        "video": "morphs/rooftop-court__balloon-salt-flats.4af00855.mp4",
+        "duration": 8.0
       }
     },
     {
@@ -326,7 +332,9 @@
         "lqip": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAABQBACdASogABIAPu1gqE2ppaOiMAgBMB2JZwDLLBni8LRNtf/CN71HjaGAANni/DSGfSZUS3Z/QaS2Ffw22d4x13T2xAalbUTcll1Zhidyb87cs/xFUfD/SvxR8WIgAAA="
       },
       "transition": {
-        "type": "zoom"
+        "type": "video",
+        "video": "morphs/balloon-salt-flats__endless-library.c5fbad5a.mp4",
+        "duration": 8.0
       }
     },
     {
@@ -402,7 +410,9 @@
         "lqip": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAAAwBQCdASogABIAPt1WpE2opKOiN/qoARAbiWcAxNgYvLSqOgPidmz3Ah1Wf2ABxu8NAAD+5Z4wdz3aMMax+J5lFdx2dqsxI81pzSvZalCJaqxH+rqTN4CE6jw8SDPc0sYAAA=="
       },
       "transition": {
-        "type": "zoom"
+        "type": "video",
+        "video": "morphs/endless-library__overgrown-greenhouse.4726483b.mp4",
+        "duration": 8.0
       }
     },
     {
@@ -480,7 +490,9 @@
         "lqip": "data:image/webp;base64,UklGRmIAAABXRUJQVlA4IFYAAAAwBACdASogABIAPuFeqE2opSQiMAwBEBwJZwDMWA1GuGguiWS2/VW9KcAA/tBcWqRtTRTnNO208F3Mnh5dN2YIMF90Ye+TYJeTeJQTvmhCpEuFT2AAAA=="
       },
       "transition": {
-        "type": "zoom"
+        "type": "video",
+        "video": "morphs/overgrown-greenhouse__mountain-road-phonebox.1263e6fe.mp4",
+        "duration": 8.0
       }
     },
     {
@@ -645,7 +657,9 @@
         "lqip": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAADwAwCdASogABIAPu1mq1AppSOisBgIATAdiWUAv+wNzLAxEV2CSzIAAP6n9IuWwE/XHJKzbG+Kfx2Yi427ur5oynpguu2jiot9HRGR84J1BFUKBUzISaAAAAA="
       },
       "transition": {
-        "type": "zoom"
+        "type": "video",
+        "video": "morphs/drowned-street__fog-ship-deck.b7e904a8.mp4",
+        "duration": 8.0
       }
     },
     {
@@ -736,7 +750,9 @@
         "lqip": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAADwAwCdASogABIAPuFUpU2opCOiN/qoARAcCWcAxkAaIOK8hKU5+UlAAO7802X6wIRNTL+OktQU23au9/SuS7W9GXVM47zggxYk3alwjP7zZIiFARbAgXQN+PtAAA=="
       },
       "transition": {
-        "type": "zoom"
+        "type": "video",
+        "video": "morphs/fog-ship-deck__lighthouse-gallery.61e9138e.mp4",
+        "duration": 8.0
       }
     },
     {
@@ -811,7 +827,9 @@
         "lqip": "data:image/webp;base64,UklGRnIAAABXRUJQVlA4IGYAAAAwBACdASogABIAPuVepU2pJSOiMAwBIByJZQDA3BrbFIQkVrA8HAXNpUAA/qJuzw+QtpR0j34xt9upU5nOcpC9e09IuuIpKpDzo1E9pFNZyW5EvGt4ZQE+vth+Q2yOV4FBF9zPUAA="
       },
       "transition": {
-        "type": "zoom"
+        "type": "video",
+        "video": "morphs/lighthouse-gallery__cliff-cottage.b0e1ad4e.mp4",
+        "duration": 8.0
       }
     }
   ]

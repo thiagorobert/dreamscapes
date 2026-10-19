@@ -24,6 +24,18 @@ Segment and verify rows (written by `dsp hotspot`, see `hotspots.CallLog`) add `
 ``concept``, ``image`` (path and SHA-256 of the picture segmented), ``request_id``,
 ``response_id`` and ``usage``; segment rows add ``hint_box``, verify rows
 ``polygon_vertices``, ``served_model`` and ``matches`` (Claude's yes or no).
+
+Morph rows (``kind: morph``, written by `dsp morph`) come in two purposes. ``morph`` is a paid
+Veo call: ``scene`` and ``next_scene`` name the edge, plus ``prompt``, ``parameters``,
+``references`` (the first and last frames with their SHA-256), ``seed`` (always null),
+``style_block_sha256``, ``response_id`` (the operation name), ``polls``, the raw download
+(``raw_path``, ``raw_sha256``, ``raw_bytes``, ``raw_info``) and the encoded clip
+(``output_path``, ``output_sha256``, ``output_bytes``, ``output_info``), or
+``postprocess_error`` when ffmpeg failed after the paid call. ``billing`` says how sure the
+cost is (``charged``, ``unknown`` for a job abandoned while still rendering, ``none``, ``not
+charged``); a call that may have produced a video also carries ``retrievable_until``, when
+Google deletes it. ``reencode`` rows cost nothing: they record a clip rebuilt from an earlier
+download, pointing at that call with ``source_row``.
 """
 
 from __future__ import annotations

@@ -4,9 +4,8 @@ Every command finds the repository root by walking up from the current directory
 directory that contains both ``content/`` and ``pipeline/pyproject.toml``, and resolves all
 paths from there.
 
-`validate`, `schema` and `placeholders` work today. The other commands are registered with
-their final names and options so scripts and docs can rely on them; the work packages that
-implement them replace the stub bodies.
+Each command imports its module lazily, so `dsp --help` and the commands that need no keys
+start quickly and never load an SDK they do not use.
 """
 
 from __future__ import annotations
@@ -28,8 +27,6 @@ app = typer.Typer(
     pretty_exceptions_enable=False,
 )
 
-NOT_IMPLEMENTED_EXIT = 2
-
 
 def _repo() -> RepoPaths:
     try:
@@ -37,12 +34,6 @@ def _repo() -> RepoPaths:
     except RepoRootNotFound as error:
         typer.echo(f"error: {error}", err=True)
         raise typer.Exit(1) from error
-
-
-def _not_implemented(command: str) -> NoReturn:
-    _repo()
-    typer.echo(f"dsp {command}: not implemented yet", err=True)
-    raise typer.Exit(NOT_IMPLEMENTED_EXIT)
 
 
 # Shared option declarations, so the same flag reads the same everywhere.
@@ -430,11 +421,71 @@ def morph(
         tuple[str, str] | None,
         typer.Option("--edge", metavar="FROM TO", help="Scene ids of the transition to render."),
     ] = None,
-    all_: AllOpt = False,
+    all_: Annotated[
+        bool, typer.Option("--all", help="Render every edge of the loop, in loop order.")
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Render a new clip (a paid call) even if one is in place."),
+    ] = False,
+    reencode: Annotated[
+        bool,
+        typer.Option(
+            "--reencode",
+            help="Rebuild clips from the saved Veo downloads in assets/candidates/morphs with "
+            "the current encoding settings; makes no paid call. With --all only edges that "
+            "already play a clip; an edge that keeps the zoom must be named with --edge.",
+        ),
+    ] = False,
+    keep_stale: Annotated[
+        bool,
+        typer.Option(
+            "--keep-stale",
+            help="Keep a clip in place even when the graded masters changed since it was "
+            "rendered (by default such a clip is rendered again).",
+        ),
+    ] = False,
     dry_run: DryRunOpt = False,
+    resolution: Annotated[
+        str, typer.Option("--resolution", help="Veo output resolution: 720p or 1080p.")
+    ] = "1080p",
+    duration: Annotated[
+        int, typer.Option("--duration", help="Clip length in seconds: 4, 6 or 8 (1080p needs 8).")
+    ] = 8,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Veo model id (default veo-3.1-fast-generate-preview)."),
+    ] = None,
 ) -> None:
-    """Render a first-frame/last-frame morph clip for a transition."""
-    _not_implemented("morph")
+    """Render a first-frame/last-frame Veo morph clip for a transition and use it on the site."""
+    from .morph import pick_edges, run_morph
+    from .providers.veo import VeoProvider
+
+    paths = _repo()
+    manifest = _manifest(paths)
+    if resolution not in ("720p", "1080p"):
+        _fail(f"--resolution must be 720p or 1080p, got {resolution!r}")
+    try:
+        edges = pick_edges(manifest, edge, all_)
+    except ValueError as error:
+        _fail(str(error))
+    guard = _spend_guard()
+    code = run_morph(
+        paths,
+        manifest,
+        edges,
+        VeoProvider(model=model, root=paths.root),
+        resolution=resolution,
+        duration=duration,
+        force=force,
+        reencode=reencode,
+        named=edge is not None,
+        keep_stale=keep_stale,
+        dry_run=dry_run,
+        guard=guard,
+        echo=typer.echo,
+    )
+    raise typer.Exit(code)
 
 
 @app.command()

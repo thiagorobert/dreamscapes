@@ -59,7 +59,9 @@ scenes:
         - ecd6cb5ce4304ec3
         - 79c923831cbe4d97
     transition:
-      type: zoom
+      type: video
+      video: morphs/cliff-cottage__prison-yard.7e1b84b3.mp4
+      duration: 8.0
   - id: prison-yard
     title: The empty yard
     alt: >-
@@ -125,7 +127,9 @@ scenes:
         - 61671b7d31ff476d
         - 939c9bcf25244c40
     transition:
-      type: zoom
+      type: video
+      video: morphs/prison-yard__rooftop-court.2c0d9334.mp4
+      duration: 8.0
   - id: rooftop-court
     title: Court above the city
     alt: >-
@@ -194,7 +198,9 @@ scenes:
         - f58eb753ca754bce
         - e8f592d4f8ab415a
     transition:
-      type: zoom
+      type: video
+      video: morphs/rooftop-court__balloon-salt-flats.4af00855.mp4
+      duration: 8.0
   - id: balloon-salt-flats
     title: The salt mirror
     alt: >-
@@ -248,7 +254,9 @@ scenes:
         - 815575b1eeaa41eb
         - 6cd100e888ee4f67
     transition:
-      type: zoom
+      type: video
+      video: morphs/balloon-salt-flats__endless-library.c5fbad5a.mp4
+      duration: 8.0
   - id: endless-library
     title: The endless library
     alt: >-
@@ -304,7 +312,9 @@ scenes:
         - a733c4158b294deb
         - d59f0318826a43db
     transition:
-      type: zoom
+      type: video
+      video: morphs/endless-library__overgrown-greenhouse.4726483b.mp4
+      duration: 8.0
   - id: overgrown-greenhouse
     title: The overgrown greenhouse
     alt: >-
@@ -362,7 +372,9 @@ scenes:
         - 0ec90f7e56304fd3
         - 72a4b177f2534d4b
     transition:
-      type: zoom
+      type: video
+      video: morphs/overgrown-greenhouse__mountain-road-phonebox.1263e6fe.mp4
+      duration: 8.0
   - id: mountain-road-phonebox
     title: The mountain road
     alt: >-
@@ -483,7 +495,9 @@ scenes:
         - 6af4fbc5d67e40e7
         - 19a9ce7e52724af3
     transition:
-      type: zoom
+      type: video
+      video: morphs/drowned-street__fog-ship-deck.b7e904a8.mp4
+      duration: 8.0
   - id: fog-ship-deck
     title: Becalmed in fog
     alt: >-
@@ -550,7 +564,9 @@ scenes:
         - f7784affb6ee41de
         - 6d18520c1ceb483c
     transition:
-      type: zoom
+      type: video
+      video: morphs/fog-ship-deck__lighthouse-gallery.61e9138e.mp4
+      duration: 8.0
   - id: lighthouse-gallery
     title: The lamp room
     alt: >-
@@ -606,4 +622,6 @@ scenes:
         - f2eb4eab1a954c07
         - f93a785894694769
     transition:
-      type: zoom
+      type: video
+      video: morphs/lighthouse-gallery__cliff-cottage.b0e1ad4e.mp4
+      duration: 8.0
