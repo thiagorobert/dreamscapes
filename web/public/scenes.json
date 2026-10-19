@@ -7,46 +7,30 @@
       "title": "The cottage on the cliff",
       "alt": "A stone cottage with one lit window stands on a stormy sea cliff, a lighthouse glowing faintly across the cove, waves breaking on the rocks below and a rowing boat pulled up on the shingle.",
       "next": "prison-yard",
-      "focal": [0.7, 0.3],
+      "focal": [0.726608, 0.40014],
       "bridge": {
         "object": "lighthouse",
         "polygon": [
-          [0.7732, 0.3],
-          [0.7718, 0.3254],
-          [0.7677, 0.3498],
-          [0.7609, 0.3723],
-          [0.7518, 0.3921],
-          [0.7407, 0.4083],
-          [0.728, 0.4203],
-          [0.7143, 0.4277],
-          [0.7, 0.4302],
-          [0.6857, 0.4277],
-          [0.672, 0.4203],
-          [0.6593, 0.4083],
-          [0.6482, 0.3921],
-          [0.6391, 0.3723],
-          [0.6323, 0.3498],
-          [0.6282, 0.3254],
-          [0.6268, 0.3],
-          [0.6282, 0.2746],
-          [0.6323, 0.2502],
-          [0.6391, 0.2277],
-          [0.6482, 0.2079],
-          [0.6593, 0.1917],
-          [0.672, 0.1797],
-          [0.6857, 0.1723],
-          [0.7, 0.1698],
-          [0.7143, 0.1723],
-          [0.728, 0.1797],
-          [0.7407, 0.1917],
-          [0.7518, 0.2079],
-          [0.7609, 0.2277],
-          [0.7677, 0.2502],
-          [0.7718, 0.2746]
+          [0.7122, 0.2218],
+          [0.7092, 0.2261],
+          [0.6985, 0.2556],
+          [0.6873, 0.2921],
+          [0.6833, 0.4683],
+          [0.6833, 0.5109],
+          [0.6853, 0.5152],
+          [0.6882, 0.5169],
+          [0.7214, 0.5178],
+          [0.7878, 0.5056],
+          [0.7908, 0.5004],
+          [0.7908, 0.4944],
+          [0.7849, 0.4544],
+          [0.7317, 0.2609],
+          [0.719, 0.2261],
+          [0.7161, 0.2218]
         ],
-        "bbox": [0.6268, 0.1698, 0.7732, 0.4302],
-        "centroid": [0.7, 0.3],
-        "area": 0.029767
+        "bbox": [0.6833, 0.2218, 0.7908, 0.5178],
+        "centroid": [0.726608, 0.40014],
+        "area": 0.020915
       },
       "image": {
         "width": 2048,
@@ -55,41 +39,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/cliff-cottage/cliff-cottage-640.4737d8ca.avif"
+              "src": "dreams/cliff-cottage/cliff-cottage-640.eac635ec.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/cliff-cottage/cliff-cottage-1024.bee35a8e.avif"
+              "src": "dreams/cliff-cottage/cliff-cottage-1024.2d15487b.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/cliff-cottage/cliff-cottage-1536.10efed76.avif"
+              "src": "dreams/cliff-cottage/cliff-cottage-1536.6a925482.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/cliff-cottage/cliff-cottage-2048.1fd37bb9.avif"
+              "src": "dreams/cliff-cottage/cliff-cottage-2048.d02e3d1f.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/cliff-cottage/cliff-cottage-640.e5cedb35.webp"
+              "src": "dreams/cliff-cottage/cliff-cottage-640.87003544.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/cliff-cottage/cliff-cottage-1024.57992933.webp"
+              "src": "dreams/cliff-cottage/cliff-cottage-1024.c8fa16a9.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/cliff-cottage/cliff-cottage-1536.ea1a8f62.webp"
+              "src": "dreams/cliff-cottage/cliff-cottage-1536.83e0dd78.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/cliff-cottage/cliff-cottage-2048.6d9c29a1.webp"
+              "src": "dreams/cliff-cottage/cliff-cottage-2048.5caaa71f.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRlYAAABXRUJQVlA4IEoAAABwAwCdASogABIAPu1mqk26JaQiMAgDQB2JYwCw7C8VGbJc4gAA/trp4XlHYWTtcqlHXDgK7LyJxGtKdy46DwzI6w684JnsQNAAAA=="
+        "lqip": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAADwBACdASogABIAPu1qr1AppiSiqAqpMB2JZwDDrA7pkvtBzBvBifSUAnO3zgvTaAAAx0x0FOZQaJg48G8juCy56TjitDP3GmLMIFdVV7gABMmVr8z4iw/qiLxYDERniMigAA=="
       },
       "transition": {
         "type": "zoom"
@@ -100,18 +84,40 @@
       "title": "The empty yard",
       "alt": "An empty prison yard at night, with a cracked basketball court and its hoop, puddles and chain-link fences lit through the fog by floodlights and a watchtower built like a lighthouse.",
       "next": "rooftop-court",
-      "focal": [0.62, 0.42],
+      "focal": [0.675401, 0.390153],
       "bridge": {
         "object": "basketball hoop",
         "polygon": [
-          [0.5468, 0.3115],
-          [0.6932, 0.3115],
-          [0.6932, 0.5285],
-          [0.5468, 0.5285]
+          [0.6926, 0.2209],
+          [0.6106, 0.2574],
+          [0.6067, 0.2617],
+          [0.6062, 0.2704],
+          [0.6184, 0.3659],
+          [0.6301, 0.4353],
+          [0.6331, 0.444],
+          [0.636, 0.4457],
+          [0.6404, 0.4414],
+          [0.658, 0.3711],
+          [0.6589, 0.3919],
+          [0.6609, 0.3963],
+          [0.6638, 0.398],
+          [0.6873, 0.398],
+          [0.6853, 0.7279],
+          [0.6873, 0.7322],
+          [0.6902, 0.7339],
+          [0.7029, 0.7339],
+          [0.7058, 0.7322],
+          [0.7078, 0.7279],
+          [0.7078, 0.3928],
+          [0.7151, 0.3893],
+          [0.719, 0.3832],
+          [0.719, 0.2305],
+          [0.717, 0.2261],
+          [0.7141, 0.2244]
         ],
-        "bbox": [0.5468, 0.3115, 0.6932, 0.5285],
-        "centroid": [0.62, 0.42],
-        "area": 0.031769
+        "bbox": [0.6062, 0.2209, 0.719, 0.7339],
+        "centroid": [0.675401, 0.390153],
+        "area": 0.024991
       },
       "image": {
         "width": 2048,
@@ -120,41 +126,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/prison-yard/prison-yard-640.c4b14443.avif"
+              "src": "dreams/prison-yard/prison-yard-640.4c123f53.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/prison-yard/prison-yard-1024.05f12135.avif"
+              "src": "dreams/prison-yard/prison-yard-1024.9b9610eb.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/prison-yard/prison-yard-1536.80a84f1a.avif"
+              "src": "dreams/prison-yard/prison-yard-1536.c01a071e.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/prison-yard/prison-yard-2048.28d29e75.avif"
+              "src": "dreams/prison-yard/prison-yard-2048.78b90291.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/prison-yard/prison-yard-640.98f7923f.webp"
+              "src": "dreams/prison-yard/prison-yard-640.ef95ca65.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/prison-yard/prison-yard-1024.c6b7fdfb.webp"
+              "src": "dreams/prison-yard/prison-yard-1024.934cb73e.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/prison-yard/prison-yard-1536.d7e2d6e4.webp"
+              "src": "dreams/prison-yard/prison-yard-1536.dc81c263.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/prison-yard/prison-yard-2048.407b3064.webp"
+              "src": "dreams/prison-yard/prison-yard-2048.696149d0.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRlYAAABXRUJQVlA4IEoAAABwAwCdASogABIAPu1iqU2ppaOiMAgBMB2JZwDA3Bi5LlIIkQAA/uM3qsxPw07g1/C8fiYnXB5BwH/9Ka73AqrvtjsSpcEvCpAAAA=="
+        "lqip": "data:image/webp;base64,UklGRmIAAABXRUJQVlA4IFYAAADwBACdASogABIAPuleo02pJSMiMAwBIB0JZwC7AB6SFKPtc8lVBV3xk4XjramgJNgA/rm78OMAET0v9tVBPIF0lJClLGZAFVAI29EaQD7QWrrAxwQAAA=="
       },
       "transition": {
         "type": "zoom"
@@ -213,41 +219,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/rooftop-court/rooftop-court-640.29d90691.avif"
+              "src": "dreams/rooftop-court/rooftop-court-640.cc0030c8.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/rooftop-court/rooftop-court-1024.d0ff660f.avif"
+              "src": "dreams/rooftop-court/rooftop-court-1024.171b91eb.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/rooftop-court/rooftop-court-1536.f1e0d615.avif"
+              "src": "dreams/rooftop-court/rooftop-court-1536.330c4357.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/rooftop-court/rooftop-court-2048.1e59249d.avif"
+              "src": "dreams/rooftop-court/rooftop-court-2048.016c6c49.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/rooftop-court/rooftop-court-640.9eadbdb6.webp"
+              "src": "dreams/rooftop-court/rooftop-court-640.96ba981a.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/rooftop-court/rooftop-court-1024.4ecb9e11.webp"
+              "src": "dreams/rooftop-court/rooftop-court-1024.800c990e.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/rooftop-court/rooftop-court-1536.b4e395fe.webp"
+              "src": "dreams/rooftop-court/rooftop-court-1536.37844860.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/rooftop-court/rooftop-court-2048.77f2aa1d.webp"
+              "src": "dreams/rooftop-court/rooftop-court-2048.c1192289.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRlwAAABXRUJQVlA4IFAAAAAwAwCdASogABIAPu1kqU2/paQiMAgD8B2JQBWGZDCbucxwAOQ+/7JsbK/9GQ2E+dh8+K34RTrSv/JZ/ybvACWsm2kVmH6fdVzgCkElTdRAAA=="
+        "lqip": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAABQBACdASogABIAPuVgpE2pJaMiMAwBIByJZwDDcB4XJ1NQAW8PZtqgv6oAAP6rXRXtZ+bajye7r2QMvtDE92j3xL1jntpr7wkeF95wcHSycddB1CMSW8rIAAA="
       },
       "transition": {
         "type": "zoom"
@@ -289,41 +295,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/balloon-salt-flats/balloon-salt-flats-640.81c81b04.avif"
+              "src": "dreams/balloon-salt-flats/balloon-salt-flats-640.4f5284b5.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/balloon-salt-flats/balloon-salt-flats-1024.ca9fab6a.avif"
+              "src": "dreams/balloon-salt-flats/balloon-salt-flats-1024.e4411bd9.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/balloon-salt-flats/balloon-salt-flats-1536.74868254.avif"
+              "src": "dreams/balloon-salt-flats/balloon-salt-flats-1536.8cc30174.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/balloon-salt-flats/balloon-salt-flats-2048.159b0a2a.avif"
+              "src": "dreams/balloon-salt-flats/balloon-salt-flats-2048.a5b6b349.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/balloon-salt-flats/balloon-salt-flats-640.3f283ccb.webp"
+              "src": "dreams/balloon-salt-flats/balloon-salt-flats-640.10a39bb9.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/balloon-salt-flats/balloon-salt-flats-1024.b11e6536.webp"
+              "src": "dreams/balloon-salt-flats/balloon-salt-flats-1024.a213dde9.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/balloon-salt-flats/balloon-salt-flats-1536.be164de7.webp"
+              "src": "dreams/balloon-salt-flats/balloon-salt-flats-1536.db832455.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/balloon-salt-flats/balloon-salt-flats-2048.259a82b6.webp"
+              "src": "dreams/balloon-salt-flats/balloon-salt-flats-2048.9d2b6c36.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRloAAABXRUJQVlA4IE4AAADwAgCdASogABIAPuVgo02/paMiMAwD8ByJQAAOsiw0AAD+5az+nDeiLzChD5WQXkCuPANZZ6lLorfGfRHveXETYi5vlt7619ZdcvTgAAA="
+        "lqip": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAABQBACdASogABIAPu1gqE2ppaOiMAgBMB2JZwDLLBni8LRNtf/CN71HjaGAANni/DSGfSZUS3Z/QaS2Ffw22d4x13T2xAalbUTcll1Zhidyb87cs/xFUfD/SvxR8WIgAAA="
       },
       "transition": {
         "type": "zoom"
@@ -356,41 +362,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/endless-library/endless-library-640.30b348eb.avif"
+              "src": "dreams/endless-library/endless-library-640.ce8716c1.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/endless-library/endless-library-1024.a7d3dae7.avif"
+              "src": "dreams/endless-library/endless-library-1024.66191eae.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/endless-library/endless-library-1536.8bccaca7.avif"
+              "src": "dreams/endless-library/endless-library-1536.c987a6f7.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/endless-library/endless-library-2048.1852eab3.avif"
+              "src": "dreams/endless-library/endless-library-2048.93d4c5de.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/endless-library/endless-library-640.add2f63f.webp"
+              "src": "dreams/endless-library/endless-library-640.59d5cf2f.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/endless-library/endless-library-1024.32974fb5.webp"
+              "src": "dreams/endless-library/endless-library-1024.56c51f4c.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/endless-library/endless-library-1536.6dbecd30.webp"
+              "src": "dreams/endless-library/endless-library-1536.bc92d30b.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/endless-library/endless-library-2048.c390fc28.webp"
+              "src": "dreams/endless-library/endless-library-2048.a19fa866.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRlgAAABXRUJQVlA4IEwAAABwAwCdASogABIAPu1iqE2/paOiMAgD8B2JYwC+SCEsPcgFXcAA/rkn3rZkyshSbDahU0R9Zd+UY0M3r0SjO+ejv042ZHcufKg7gAAA"
+        "lqip": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAAAwBQCdASogABIAPt1WpE2opKOiN/qoARAbiWcAxNgYvLSqOgPidmz3Ah1Wf2ABxu8NAAD+5Z4wdz3aMMax+J5lFdx2dqsxI81pzSvZalCJaqxH+rqTN4CE6jw8SDPc0sYAAA=="
       },
       "transition": {
         "type": "zoom"
@@ -427,41 +433,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-640.eb374b14.avif"
+              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-640.db28d921.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-1024.50510f17.avif"
+              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-1024.31e69b24.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-1536.cd0f8be9.avif"
+              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-1536.7ad58598.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-2048.7d983b04.avif"
+              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-2048.b9f16312.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-640.fc5857c2.webp"
+              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-640.7e93e1fd.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-1024.1b338ff7.webp"
+              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-1024.a7832a97.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-1536.2c044560.webp"
+              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-1536.8d72ee65.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-2048.68e703cb.webp"
+              "src": "dreams/overgrown-greenhouse/overgrown-greenhouse-2048.ebf2fa1c.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRlgAAABXRUJQVlA4IEwAAACwAwCdASogABIAPu1qqk8ppiOiMBgIATAdiWcAAC1PA/J9mxNPgAD8Utuo6YxB46vdVMuoTc/oPi4ycESK6YrlV3Wrzy8Xw5fdaoAA"
+        "lqip": "data:image/webp;base64,UklGRmIAAABXRUJQVlA4IFYAAAAwBACdASogABIAPuFeqE2opSQiMAwBEBwJZwDMWA1GuGguiWS2/VW9KcAA/tBcWqRtTRTnNO208F3Mnh5dN2YIMF90Ye+TYJeTeJQTvmhCpEuFT2AAAA=="
       },
       "transition": {
         "type": "zoom"
@@ -492,41 +498,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-640.f22d8544.avif"
+              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-640.c772e64f.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-1024.1a74c6db.avif"
+              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-1024.aac3d1f3.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-1536.0946f6f6.avif"
+              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-1536.936b3ea0.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-2048.9b0ed146.avif"
+              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-2048.d6f11569.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-640.80740b3f.webp"
+              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-640.e43a44f0.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-1024.5b9e45a4.webp"
+              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-1024.e1ccea91.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-1536.1d8b5a08.webp"
+              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-1536.73735b4a.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-2048.c58ca9c3.webp"
+              "src": "dreams/mountain-road-phonebox/mountain-road-phonebox-2048.8f647027.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAAAQBACdASogABIAPu1mqk2/paQiMAgD8B2JYwCxHxgEE5Yu7XmvvlHwsAD+6/pZu5xQvhJXK8WzNpFdjNs6qjfEFiSmrFgCElrbGKniPbwpyP2JI2xn/CAA"
+        "lqip": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAACwBACdASogABIAPu1mqk2ppaQiMAgBMB2JZwC/OB2CW7P1R4HjZYfKtceRvI9gAP6pjTXUMJ/O2xtRF8MxvR+BBLlm/X41n5hkMKxsbs18y7gxw5S7bPQh6AAAAA=="
       },
       "transition": {
         "type": "zoom"
@@ -537,17 +543,42 @@
       "title": "The drowned street",
       "alt": "A city street drowned under clear water, seen looking up from the pavement, where the hull of a passing ship darkens the bright surface above drifting fish, dark shop windows and an open telephone box whose handset floats on its cord.",
       "next": "fog-ship-deck",
-      "focal": [0.5, 0.24],
+      "focal": [0.522496, 0.217183],
       "bridge": {
         "object": "ship's hull",
         "polygon": [
-          [0.5, 0.0664],
-          [0.5928, 0.3268],
-          [0.4072, 0.3268]
+          [0.4182, 0.1506],
+          [0.4187, 0.1602],
+          [0.4285, 0.2166],
+          [0.4329, 0.2218],
+          [0.4485, 0.2322],
+          [0.5178, 0.2548],
+          [0.5691, 0.2747],
+          [0.6008, 0.2826],
+          [0.6135, 0.2895],
+          [0.6169, 0.2878],
+          [0.6248, 0.2678],
+          [0.6248, 0.2617],
+          [0.6223, 0.2504],
+          [0.6267, 0.2418],
+          [0.6262, 0.2348],
+          [0.6111, 0.2157],
+          [0.5911, 0.2036],
+          [0.5911, 0.1957],
+          [0.5881, 0.1905],
+          [0.5706, 0.1905],
+          [0.5232, 0.1827],
+          [0.4915, 0.1714],
+          [0.4778, 0.1628],
+          [0.4719, 0.1549],
+          [0.468, 0.1523],
+          [0.4441, 0.1532],
+          [0.4314, 0.1445],
+          [0.4211, 0.1454]
         ],
-        "bbox": [0.4072, 0.0664, 0.5928, 0.3268],
-        "centroid": [0.5, 0.24],
-        "area": 0.024165
+        "bbox": [0.4182, 0.1445, 0.6267, 0.2895],
+        "centroid": [0.522496, 0.217183],
+        "area": 0.015598
       },
       "image": {
         "width": 2048,
@@ -556,41 +587,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/drowned-street/drowned-street-640.9e69b99c.avif"
+              "src": "dreams/drowned-street/drowned-street-640.be4f8d75.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/drowned-street/drowned-street-1024.38b4f443.avif"
+              "src": "dreams/drowned-street/drowned-street-1024.fef5e3d9.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/drowned-street/drowned-street-1536.fa546227.avif"
+              "src": "dreams/drowned-street/drowned-street-1536.7b7d5e26.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/drowned-street/drowned-street-2048.dcaf4096.avif"
+              "src": "dreams/drowned-street/drowned-street-2048.3c10ddc9.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/drowned-street/drowned-street-640.60b739aa.webp"
+              "src": "dreams/drowned-street/drowned-street-640.189e3327.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/drowned-street/drowned-street-1024.f40e3287.webp"
+              "src": "dreams/drowned-street/drowned-street-1024.74afc5b8.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/drowned-street/drowned-street-1536.52d124a1.webp"
+              "src": "dreams/drowned-street/drowned-street-1536.7c2d3ff9.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/drowned-street/drowned-street-2048.67ca0f71.webp"
+              "src": "dreams/drowned-street/drowned-street-2048.9c527425.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRlQAAABXRUJQVlA4IEgAAADwAwCdASogABIAPu1mqk2ppaQiMAgBMB2JZQC9WBZHtxrwMGMIwSoAAJkCtHBIptAg5PvEkBqD4lJSvQVuFtay/frwwZj5YAA="
+        "lqip": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAADwAwCdASogABIAPu1mq1AppSOisBgIATAdiWUAv+wNzLAxEV2CSzIAAP6n9IuWwE/XHJKzbG+Kfx2Yi427ur5oynpguu2jiot9HRGR84J1BFUKBUzISaAAAAA="
       },
       "transition": {
         "type": "zoom"
@@ -601,19 +632,44 @@
       "title": "Becalmed in fog",
       "alt": "The empty deck of an old sailing ship becalmed in thick fog at night, a paper lantern glowing amber in the shrouds above the unattended wheel and a brass bell, the rigging fading into white.",
       "next": "lighthouse-gallery",
-      "focal": [0.74, 0.500011],
+      "focal": [0.724406, 0.400126],
       "bridge": {
         "object": "paper lantern",
         "polygon": [
-          [0.74, 0.3524],
-          [0.8189, 0.4544],
-          [0.7888, 0.6194],
-          [0.6912, 0.6194],
-          [0.6611, 0.4544]
+          [0.7219, 0.2817],
+          [0.719, 0.2834],
+          [0.7087, 0.3008],
+          [0.7087, 0.3103],
+          [0.6941, 0.3312],
+          [0.6833, 0.3555],
+          [0.676, 0.3815],
+          [0.6721, 0.4336],
+          [0.6726, 0.4431],
+          [0.6848, 0.4692],
+          [0.6921, 0.4787],
+          [0.7004, 0.4831],
+          [0.7009, 0.4883],
+          [0.7029, 0.4926],
+          [0.7151, 0.4978],
+          [0.7332, 0.4909],
+          [0.7546, 0.4727],
+          [0.7629, 0.4614],
+          [0.7698, 0.4475],
+          [0.7737, 0.4362],
+          [0.7771, 0.4206],
+          [0.7761, 0.3772],
+          [0.7717, 0.3572],
+          [0.7659, 0.3433],
+          [0.7566, 0.3294],
+          [0.7532, 0.326],
+          [0.7449, 0.3225],
+          [0.7366, 0.3138],
+          [0.7302, 0.3008],
+          [0.7263, 0.286]
         ],
-        "bbox": [0.6611, 0.3524, 0.8189, 0.6194],
-        "centroid": [0.74, 0.500011],
-        "area": 0.029118
+        "bbox": [0.6721, 0.2817, 0.7771, 0.4978],
+        "centroid": [0.724406, 0.400126],
+        "area": 0.015472
       },
       "image": {
         "width": 2048,
@@ -622,41 +678,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/fog-ship-deck/fog-ship-deck-640.b4aeabf2.avif"
+              "src": "dreams/fog-ship-deck/fog-ship-deck-640.0b4f4408.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/fog-ship-deck/fog-ship-deck-1024.08088791.avif"
+              "src": "dreams/fog-ship-deck/fog-ship-deck-1024.8d5eb589.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/fog-ship-deck/fog-ship-deck-1536.a4c6fb41.avif"
+              "src": "dreams/fog-ship-deck/fog-ship-deck-1536.93c01285.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/fog-ship-deck/fog-ship-deck-2048.7fc01a71.avif"
+              "src": "dreams/fog-ship-deck/fog-ship-deck-2048.6735ce1c.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/fog-ship-deck/fog-ship-deck-640.d405503a.webp"
+              "src": "dreams/fog-ship-deck/fog-ship-deck-640.c3dad50f.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/fog-ship-deck/fog-ship-deck-1024.fe966ead.webp"
+              "src": "dreams/fog-ship-deck/fog-ship-deck-1024.b390031d.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/fog-ship-deck/fog-ship-deck-1536.008fc517.webp"
+              "src": "dreams/fog-ship-deck/fog-ship-deck-1536.e6c0f972.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/fog-ship-deck/fog-ship-deck-2048.0928362b.webp"
+              "src": "dreams/fog-ship-deck/fog-ship-deck-2048.1a806b4f.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRloAAABXRUJQVlA4IE4AAABQAwCdASogABIAPu1kqU2ppaQjMAgBMB2JZQCdACHWnAmLkAD+0xCqpM0Dh4xQgDyh+in/91E1rrKcPWVMu67TB0ZoAlJPuvrFGaYAAAA="
+        "lqip": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAADwAwCdASogABIAPuFUpU2opCOiN/qoARAcCWcAxkAaIOK8hKU5+UlAAO7802X6wIRNTL+OktQU23au9/SuS7W9GXVM47zggxYk3alwjP7zZIiFARbAgXQN+PtAAA=="
       },
       "transition": {
         "type": "zoom"
@@ -667,22 +723,28 @@
       "title": "The lamp room",
       "alt": "Inside a lighthouse lamp room at dusk, the great lens glows amber above an oil can and a crumpled paper lantern, with a small cottage on the cliff across the inlet and mist rising off the water beyond the windows.",
       "next": "cliff-cottage",
-      "focal": [0.27, 0.42],
+      "focal": [0.293977, 0.455756],
       "bridge": {
         "object": "cottage",
         "polygon": [
-          [0.3444, 0.4748],
-          [0.3008, 0.5523],
-          [0.2392, 0.5523],
-          [0.1956, 0.4748],
-          [0.1956, 0.3652],
-          [0.2392, 0.2877],
-          [0.3008, 0.2877],
-          [0.3444, 0.3652]
+          [0.2488, 0.3737],
+          [0.2371, 0.4605],
+          [0.238, 0.5178],
+          [0.24, 0.5221],
+          [0.2937, 0.5369],
+          [0.325, 0.5369],
+          [0.3445, 0.5308],
+          [0.3503, 0.5256],
+          [0.3518, 0.464],
+          [0.3372, 0.385],
+          [0.3347, 0.3789],
+          [0.3284, 0.3763],
+          [0.2668, 0.3685],
+          [0.2532, 0.3694]
         ],
-        "bbox": [0.1956, 0.2877, 0.3444, 0.5523],
-        "centroid": [0.27, 0.42],
-        "area": 0.032614
+        "bbox": [0.2371, 0.3685, 0.3518, 0.5369],
+        "centroid": [0.293977, 0.455756],
+        "area": 0.016931
       },
       "image": {
         "width": 2048,
@@ -691,41 +753,41 @@
           "avif": [
             {
               "width": 640,
-              "src": "dreams/lighthouse-gallery/lighthouse-gallery-640.084161d3.avif"
+              "src": "dreams/lighthouse-gallery/lighthouse-gallery-640.737f7ced.avif"
             },
             {
               "width": 1024,
-              "src": "dreams/lighthouse-gallery/lighthouse-gallery-1024.8aa4706c.avif"
+              "src": "dreams/lighthouse-gallery/lighthouse-gallery-1024.f1ebb058.avif"
             },
             {
               "width": 1536,
-              "src": "dreams/lighthouse-gallery/lighthouse-gallery-1536.75188fe7.avif"
+              "src": "dreams/lighthouse-gallery/lighthouse-gallery-1536.be174552.avif"
             },
             {
               "width": 2048,
-              "src": "dreams/lighthouse-gallery/lighthouse-gallery-2048.c64a407f.avif"
+              "src": "dreams/lighthouse-gallery/lighthouse-gallery-2048.91a1b55d.avif"
             }
           ],
           "webp": [
             {
               "width": 640,
-              "src": "dreams/lighthouse-gallery/lighthouse-gallery-640.ff98c440.webp"
+              "src": "dreams/lighthouse-gallery/lighthouse-gallery-640.c0199dfa.webp"
             },
             {
               "width": 1024,
-              "src": "dreams/lighthouse-gallery/lighthouse-gallery-1024.3acb1181.webp"
+              "src": "dreams/lighthouse-gallery/lighthouse-gallery-1024.ead1e745.webp"
             },
             {
               "width": 1536,
-              "src": "dreams/lighthouse-gallery/lighthouse-gallery-1536.81e55ff7.webp"
+              "src": "dreams/lighthouse-gallery/lighthouse-gallery-1536.ce0dbb66.webp"
             },
             {
               "width": 2048,
-              "src": "dreams/lighthouse-gallery/lighthouse-gallery-2048.48f730d6.webp"
+              "src": "dreams/lighthouse-gallery/lighthouse-gallery-2048.50aefcc0.webp"
             }
           ]
         },
-        "lqip": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAAAQBACdASogABIAPu1mqU2ppaOjMAgBMB2JQBYdgbasmuWe9fu/yIRzwAD3BsnTnX83JquWTa3x1P7ba2nRFGpaxc64ztd/7/R4d8OsiuTggCezWDytQAAA"
+        "lqip": "data:image/webp;base64,UklGRnIAAABXRUJQVlA4IGYAAAAwBACdASogABIAPuVepU2pJSOiMAwBIByJZQDA3BrbFIQkVrA8HAXNpUAA/qJuzw+QtpR0j34xt9upU5nOcpC9e09IuuIpKpDzo1E9pFNZyW5EvGt4ZQE+vth+Q2yOV4FBF9zPUAA="
       },
       "transition": {
         "type": "zoom"
