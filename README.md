@@ -69,7 +69,7 @@ uv run dsp --help
 |---|---|---|
 | `dsp validate [--strict]` | Checks the manifest, hotspot rules, the loop and every referenced file. Exits 1 on errors (or on warnings with `--strict`). | no |
 | `dsp schema [--check]` | Writes `schema/scenes.schema.json` from the pipeline's models; `--check` only verifies it. | no |
-| `dsp placeholders [--force]` | Writes synthetic masters, masks, exports and `web/public/scenes.json`. Never overwrites real masters or an existing `content/scenes.yaml` unless `--force`. | no |
+| `dsp placeholders [--overwrite-masters] [--reset-manifest]` | Writes synthetic masters, masks, exports and `web/public/scenes.json`. Keeps real masters unless `--overwrite-masters`, and an existing `content/scenes.yaml` unless `--reset-manifest`; each flag destroys that kind of work. | no |
 | `dsp generate --scene <id> \| --all` | Generates candidate images. | yes |
 | `dsp select --scene <id> \| --all` | Claude scores candidates and picks the master. | yes |
 | `dsp grade [--preview]` | Applies the colour grade to every master. | no |

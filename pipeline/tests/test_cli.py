@@ -93,3 +93,14 @@ def test_placeholders_command_reports_what_it_did(placeholder_repo, monkeypatch)
     assert result.exit_code == 0, result.output
     assert "kept existing content/scenes.yaml" in result.output
     assert "web/public/scenes.json is unchanged" in result.output
+
+
+def test_placeholders_destructive_flags(placeholder_repo, monkeypatch):
+    monkeypatch.chdir(placeholder_repo.root)
+    help_text = runner.invoke(app, ["placeholders", "--help"]).output
+    assert "--overwrite-masters" in help_text and "--reset-manifest" in help_text
+    # The old catch-all flag is gone so nobody destroys both kinds of work by habit.
+    assert runner.invoke(app, ["placeholders", "--force"]).exit_code == 2
+    result = runner.invoke(app, ["placeholders", "--reset-manifest", "--overwrite-masters"])
+    assert result.exit_code == 0, result.output
+    assert "content/scenes.yaml is unchanged" in result.output

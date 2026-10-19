@@ -124,20 +124,52 @@ def test_bracketed_numbers_in_titles_do_not_cause_drift(placeholder_repo):
     assert validate_repo(placeholder_repo).issues == []
 
 
-def test_force_restores_placeholder_content(placeholder_repo):
+def _author_and_select(placeholder_repo):
+    """Simulate real work: an authored title in the YAML and a real master for one scene."""
     manifest = load_manifest(placeholder_repo.scenes_yaml)
     manifest.scenes[0].title = "An authored title"
     save_manifest(manifest, placeholder_repo.scenes_yaml)
     real = placeholder_repo.master("prison-yard")
-    Image.new("RGB", (MASTER_WIDTH, MASTER_HEIGHT)).save(real)
+    Image.new("RGB", (MASTER_WIDTH, MASTER_HEIGHT), (10, 20, 30)).save(real)
+    return placeholder_repo.scenes_yaml.read_text(), real, real.read_bytes()
 
-    report = run_placeholders(placeholder_repo, force=True)
+
+def test_overwrite_masters_repaints_real_masters_and_keeps_the_manifest(placeholder_repo):
+    yaml_text, real, _ = _author_and_select(placeholder_repo)
+
+    report = run_placeholders(placeholder_repo, overwrite_masters=True)
+
+    assert is_placeholder_image(real)
+    assert report.kept == [] and report.manifest == "kept"
+    assert placeholder_repo.scenes_yaml.read_text() == yaml_text
+    assert report.scenes_json == "written"
+    assert load_built_manifest(placeholder_repo.scenes_json).scenes[0].title == "An authored title"
+
+
+def test_reset_manifest_restores_the_yaml_and_keeps_real_masters(placeholder_repo):
+    _, real, real_bytes = _author_and_select(placeholder_repo)
+
+    report = run_placeholders(placeholder_repo, reset_manifest=True)
 
     assert report.manifest == "written"
+    assert load_manifest(placeholder_repo.scenes_yaml) == placeholder_manifest()
+    assert real.read_bytes() == real_bytes
+    assert report.kept == ["prison-yard"]
+    assert report.scenes_json == "skipped"  # a real master means scenes.json is export's job
+
+
+def test_both_flags_restore_every_placeholder(placeholder_repo):
+    _author_and_select(placeholder_repo)
+    scenes_json = placeholder_repo.scenes_json.read_bytes()
+
+    report = run_placeholders(placeholder_repo, overwrite_masters=True, reset_manifest=True)
+
+    assert report.manifest == "written"
+    assert load_manifest(placeholder_repo.scenes_yaml) == placeholder_manifest()
+    assert is_placeholder_image(placeholder_repo.master("prison-yard"))
     # Restoring the original placeholder content gives back the original scenes.json.
     assert report.scenes_json == "unchanged"
-    assert load_manifest(placeholder_repo.scenes_yaml) == placeholder_manifest()
-    assert is_placeholder_image(real)
+    assert placeholder_repo.scenes_json.read_bytes() == scenes_json
 
 
 def test_stale_exports_are_removed(placeholder_repo):

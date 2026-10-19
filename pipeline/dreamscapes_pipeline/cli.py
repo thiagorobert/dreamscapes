@@ -97,20 +97,36 @@ def schema(
 
 @app.command()
 def placeholders(
-    force: Annotated[
+    overwrite_masters: Annotated[
         bool,
         typer.Option(
-            "--force",
-            help="Overwrite real masters and rewrite content/scenes.yaml with placeholder content.",
+            "--overwrite-masters",
+            help="Destroys real work: repaint every master in assets/masters (including ones "
+            "made by `dsp select`) and its graded copy, mask and exports with placeholders. "
+            "Leaves content/scenes.yaml alone.",
+        ),
+    ] = False,
+    reset_manifest: Annotated[
+        bool,
+        typer.Option(
+            "--reset-manifest",
+            help="Destroys authored content: replace content/scenes.yaml with the placeholder "
+            "loop, losing its titles, descriptions, bridge objects and hotspot polygons. "
+            "Leaves real masters alone.",
         ),
     ] = False,
 ) -> None:
-    """Write synthetic masters, masks, exports and scenes.json so the site runs with no keys."""
+    """Write synthetic masters, masks, exports and scenes.json so the site runs with no keys.
+
+    Without flags it only replaces earlier placeholder output and never touches real work.
+    """
     from .placeholders import run_placeholders
 
     paths = _repo()
     try:
-        report = run_placeholders(paths, force=force)
+        report = run_placeholders(
+            paths, overwrite_masters=overwrite_masters, reset_manifest=reset_manifest
+        )
     except ManifestError as error:
         typer.echo(f"error: {error}", err=True)
         raise typer.Exit(1) from error

@@ -8,10 +8,10 @@ It is safe to re-run:
 
 * Output is deterministic, so a second run rewrites nothing.
 * Masters are tagged with a PNG text chunk. A master without that tag is real work (from
-  `dsp select`) and is never overwritten unless ``--force`` is given.
-* An existing ``content/scenes.yaml`` is never rewritten unless ``--force`` is given, so authored
-  descriptions survive. Its titles, alt text and ``next`` pointers flow into ``scenes.json``;
-  scenes whose polygon is still empty use the placeholder shape's outline instead.
+  `dsp select`) and is never overwritten unless ``--overwrite-masters`` is given.
+* An existing ``content/scenes.yaml`` is never rewritten unless ``--reset-manifest`` is given,
+  so authored descriptions survive. Its titles, alt text and ``next`` pointers flow into
+  ``scenes.json``; scenes whose polygon is still empty use the placeholder shape's outline.
 * ``scenes.json`` is only written when every scene still has a placeholder master. Once real
   masters exist, compiling the manifest is `dsp export`'s job.
 """
@@ -452,18 +452,24 @@ def _write_if_changed(path: Path, data: bytes) -> bool:
     return True
 
 
-def run_placeholders(paths: RepoPaths, force: bool = False) -> PlaceholderReport:
+def run_placeholders(
+    paths: RepoPaths, *, overwrite_masters: bool = False, reset_manifest: bool = False
+) -> PlaceholderReport:
+    """Paint, export and compile the placeholder scenes.
+
+    ``overwrite_masters`` repaints masters that are real work instead of keeping them.
+    ``reset_manifest`` replaces an existing ``content/scenes.yaml`` with the placeholder loop.
+    """
     report = PlaceholderReport()
     yaml_exists = paths.scenes_yaml.exists()
-    manifest = (
-        load_manifest(paths.scenes_yaml) if yaml_exists and not force else placeholder_manifest()
-    )
+    write_manifest = reset_manifest or not yaml_exists
+    manifest = placeholder_manifest() if write_manifest else load_manifest(paths.scenes_yaml)
 
     images: dict[str, SceneImage] = {}
     polygons: dict[str, list[tuple[float, float]]] = {}
     for scene in manifest.scenes:
         master_path = paths.master(scene.id)
-        owned = force or not master_path.exists() or is_placeholder_image(master_path)
+        owned = overwrite_masters or not master_path.exists() or is_placeholder_image(master_path)
         if not owned:
             report.kept.append(scene.id)
             continue
@@ -485,7 +491,7 @@ def run_placeholders(paths: RepoPaths, force: bool = False) -> PlaceholderReport
         polygons[scene.id] = polygon
         report.rendered.append(scene.id)
 
-    if not yaml_exists or force:
+    if write_manifest:
         changed = _write_if_changed(paths.scenes_yaml, dump_manifest(manifest).encode("utf-8"))
         report.manifest = "written" if changed else "unchanged"
 
