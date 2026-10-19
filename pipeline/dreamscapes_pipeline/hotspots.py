@@ -1447,6 +1447,8 @@ def _process_scene(
 
     review = paths.review_dir(sid)
     review.mkdir(parents=True, exist_ok=True)
+    for stale in review.glob("hotspot-*.png"):  # attempts from an earlier run
+        stale.unlink()
     for attempt in result.attempts:
         if attempt.polygon:
             render_overlay(image, attempt.polygon).save(review / f"hotspot-{attempt.number}.png")
@@ -1483,6 +1485,7 @@ def _process_scene(
         if not kept_comments:
             echo("  note: the file's layout forced a full rewrite, so its comments were dropped")
         if result.polygon:
+            paths.masks.mkdir(parents=True, exist_ok=True)
             Image.fromarray(rasterize(result.polygon, image.width, image.height)).save(
                 paths.mask(sid)
             )
