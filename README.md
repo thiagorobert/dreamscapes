@@ -73,14 +73,36 @@ uv run dsp --help
 | `dsp generate --scene <id> \| --all` | Generates candidate images. | yes |
 | `dsp select --scene <id> \| --all` | Claude scores candidates and picks the master. | yes |
 | `dsp grade [--preview]` | Applies the colour grade to every master. | no |
-| `dsp hotspot --scene <id> \| --all` | Segments the bridge object into a hotspot polygon. | yes |
+| `dsp hotspot --scene <id> \| --all [--force] [--box x0 y0 x1 y1] [--dry-run]` | Segments the bridge object into a hotspot polygon, has Claude verify it, and writes it to `content/scenes.yaml`. `--dry-run` needs no keys. | yes |
 | `dsp export` | Writes the image variants and `scenes.json`. | no |
 | `dsp review` | Rebuilds the contact sheets. | no |
 | `dsp morph --edge <a> <b> \| --all` | Renders morph clips between scenes. | yes |
 | `dsp bakeoff` | Compares image providers on the first scene. | yes |
 
-Only `validate`, `schema` and `placeholders` are implemented so far; the others print
-"not implemented yet" and exit with status 2. See section 10 of the plan for every option.
+Only `validate`, `schema`, `placeholders` and `hotspot` are implemented so far; the others
+print "not implemented yet" and exit with status 2. See section 10 of the plan for every option.
+
+### Hotspots
+
+`uv run dsp hotspot --scene <id>` segments the scene's bridge object in its graded master (or
+the master) with Gemini, cleans the outline (largest piece, grown by 0.5% of the width, at most
+40 vertices), and asks Claude whether the tinted region is exactly that object. On a "no" it
+retries once with the box Claude suggests; on a second "no" (or a "no" with no new box) it
+sets `needs_manual_hotspot`, and `tools/annotate/index.html` is the way to draw it by hand. A
+verified outline replaces the hotspot fields under `bridge:` and the mask
+`assets/masks/<scene>.png`; a rejected one never does, so a failed run only marks the scene
+unverified and keeps its polygon. Comments and everything else in `content/scenes.yaml` stay as
+they were. Review overlays go to `assets/review/<scene>/`: `hotspot.png` is the hotspot the
+manifest now holds, `hotspot-<n>.png` each attempt, and `hotspot.json` describes them.
+
+`--dry-run` prints the exact Gemini and Claude requests and runs the rest of the pipeline on the
+scene's committed mask. It sends nothing and leaves `content/scenes.yaml` and the masks alone,
+but still writes the review files under `assets/review/` (git-ignored). `--all` skips scenes
+that are already verified (add `--force` to redo them) and hand-drawn hotspots
+(`source: manual`); naming a scene with `--scene` always redoes it.
+`DSP_SEGMENTATION_PROVIDER=sam3` switches to SAM 3 on fal (needs
+`uv sync --extra sam3` and `FAL_KEY`). Each run prints its spend estimate first and refuses to
+go past `DSP_MAX_SPEND_USD` (default 15); a scene costs about $0.03, about $0.06 with the retry.
 
 Checks: `uv run pytest -q`, `uv run ruff check .`, `uv run ruff format --check .`
 (`uv run ruff format .` to fix).
