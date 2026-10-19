@@ -1,0 +1,46 @@
+[project]
+name = "dreamscapes-pipeline"
+version = "0.1.0"
+description = "Offline pipeline that generates, grades, hotspots and exports the Dreamscapes scenes."
+authors = [
+    { name = "Thiago", email = "thiago@groundedagents.ai" }
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx>=0.28.1",
+    "numpy>=2.5.4",
+    "opencv-python-headless>=5.0.0.93",
+    "pillow>=13.0.0",
+    "pydantic>=2",
+    "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.3",
+    "typer>=0.27.3",
+]
+
+[project.scripts]
+dsp = "dreamscapes_pipeline.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Flat layout: the package lives at pipeline/dreamscapes_pipeline, not under src/.
+module-root = ""
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# An explicit selection keeps lint results stable when ruff changes its defaults.
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

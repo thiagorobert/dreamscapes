@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    name: Pipeline (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: pipeline/uv.lock
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check .
+      - name: Check formatting
+        run: uv run ruff format --check .
+      - name: Unit tests
+        run: uv run pytest -q
+      - name: Check the JSON schema is current
+        run: uv run dsp schema --check
+      - name: Validate the scene manifest and assets
+        run: uv run dsp validate
+
+  web:
+    name: Web (TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint and check formatting
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm test
+      - name: Build for the root path
+        run: pnpm build
+      - name: Install Playwright's Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: End-to-end tests against the root-path build
+        run: pnpm e2e
+      # GitHub Pages serves the site from /dreamscapes/. Building and testing that variant here
+      # catches root-absolute URLs (such as fetching "/scenes.json") before they reach the
+      # deployed site; playwright.config.ts picks up the same base path from GITHUB_PAGES.
+      - name: Build for the GitHub Pages base path
+        run: pnpm build
+        env:
+          GITHUB_PAGES: '1'
+      - name: End-to-end tests against the GitHub Pages build
+        run: pnpm e2e
+        env:
+          GITHUB_PAGES: '1'
+      - name: Upload the Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report
+            web/test-results
+          retention-days: 7
