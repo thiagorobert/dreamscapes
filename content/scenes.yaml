@@ -3,14 +3,23 @@ start: cliff-cottage
 style_anchor: cliff-cottage
 scenes:
   - id: cliff-cottage
-    title: The cliff cottage
-    alt: 'Placeholder for the cliff cottage: a soft gradient in dusty teal and lavender.'
+    title: The cottage on the cliff
+    alt: >-
+      A stone cottage with one lit window stands on a stormy sea cliff, a lighthouse glowing faintly
+      across the cove, waves breaking on the rocks below and a rowing boat pulled up on the shingle.
     scene: >-
-      Placeholder. A stone cottage on a sea cliff under a storm, waves breaking far below; on a distant
-      headland a slender lighthouse glows faintly.
+      Late afternoon under a gathering storm. A small stone cottage with a slate roof and one warmly
+      lit window stands near the edge of a high sea cliff on the left of the view, its garden gate
+      hanging open in the wind. Far below, grey-green waves break against black rocks, and a small
+      wooden rowing boat lies pulled up on a strip of shingle. Across the cove, on a rocky headland,
+      a pale stone lighthouse stands alone, its lamp glowing faintly amber through the rain haze.
+      Long grass lies flat along the cliff path, heavy lavender clouds roll in from the sea, and a
+      thin mist hangs over the water.
     bridge:
       object: lighthouse
-      placement: small, on the far headland, upper right of centre
+      placement: >-
+        right of centre on the headland across the cove, in the upper middle of the frame, the whole
+        tower about two-fifths of the frame height tall
       polygon:
         - [0.7732, 0.3]
         - [0.7718, 0.3254]
@@ -51,14 +60,23 @@ scenes:
     transition:
       type: zoom
   - id: prison-yard
-    title: The yard
-    alt: 'Placeholder for the yard: a soft gradient in dusty teal and lavender.'
+    title: The empty yard
+    alt: >-
+      An empty prison yard at night, with a cracked basketball court and its hoop, puddles and chain-link
+      fences lit through the fog by floodlights and a watchtower built like a lighthouse.
     scene: >-
-      Placeholder. An empty prison yard at night, floodlight towers sweeping the fog like a lighthouse
-      beam over a cracked basketball court and chain-link fences.
+      Deep night in the exercise yard of an abandoned prison, wrapped in low fog after rain. Cracked
+      asphalt stretches away, the faded lines of an old basketball court half lost under shallow puddles
+      that mirror the lights. Tall chain-link fences topped with coiled wire close in the yard, and
+      floodlight towers pour hazy amber light down into the fog. The tallest watchtower is built exactly
+      like a lighthouse, its lamp turning slowly so a pale beam sweeps across the yard. At the edge
+      of the court stands a basketball hoop on a single steel pole, its net torn and its backboard
+      plain. A lone ball rests against the fence.
     bridge:
       object: basketball hoop
-      placement: small, right of centre, mid-distance
+      placement: >-
+        right of centre in the middle distance at the edge of the court, backboard, rim and net together
+        about a fifth of the frame height, its pole rising from the ground below
       polygon:
         - [0.5468, 0.3115]
         - [0.6932, 0.3115]
@@ -71,14 +89,23 @@ scenes:
     transition:
       type: zoom
   - id: rooftop-court
-    title: The rooftop court
-    alt: 'Placeholder for the rooftop court: a soft gradient in dusty teal and lavender.'
+    title: Court above the city
+    alt: >-
+      A rooftop basketball court at blue hour above a sleeping city, a hot-air balloon drifting between
+      dark towers beyond the parapet and a ball resting on the court under strings of unlit bulbs.
     scene: >-
-      Placeholder. A rooftop basketball court at blue hour above a sleeping city, one ball resting
-      under the hoop; far off a lone hot-air balloon drifts between towers.
+      Blue hour on a flat rooftop high above a sleeping city, the air still and clear after a warm
+      day. A painted basketball court covers the roof, its lines worn soft; a basketball hoop with
+      a frayed net stands at the far end, and one ball rests on the free-throw line as if just set
+      down. Strings of unlit festoon bulbs sag between two poles over the court, and a low brick parapet
+      edges the roof. Beyond it, dark towers with a few amber windows fade into haze. Hanging low
+      between two nearby towers, a lone hot-air balloon in faded plain stripes drifts in the windless
+      air, its burner glowing faintly.
     bridge:
       object: hot-air balloon
-      placement: small, upper left of centre, far away between two towers
+      placement: >-
+        upper left of centre, hanging low between two nearby towers, close enough that the envelope
+        and basket read clearly, about a quarter of the frame height tall
       polygon:
         - [0.4625, 0.28]
         - [0.4606, 0.3012]
@@ -119,14 +146,24 @@ scenes:
     transition:
       type: zoom
   - id: balloon-salt-flats
-    title: The salt flats
-    alt: 'Placeholder for the salt flats: a soft gradient in dusty teal and lavender.'
+    title: The salt mirror
+    alt: >-
+      At dawn a lone wooden door stands upright with nothing behind it on a mirror-flat salt lake,
+      under a fleet of motionless hot-air balloons and beside an empty wicker basket lying on the
+      salt.
     scene: >-
-      Placeholder. A fleet of hot-air balloons hangs motionless over a mirror-flat salt lake at dawn;
-      on the flat stands a single free-standing wooden door.
+      Dawn over a vast salt lake covered by a thin sheet of still water, so flat it mirrors the whole
+      sky. A fleet of hot-air balloons in faded plain stripes hangs motionless at different heights,
+      each one doubled perfectly in the reflection below. The air is windless, with a low band of
+      pale mist along the horizon and soft lavender cloud above it. An empty wicker balloon basket
+      lies on its side on the salt, ropes trailing. On a small island of dry, cracked salt crust stands
+      a single free-standing wooden door in its frame, with nothing behind it, slightly ajar, a thin
+      line of amber light glowing through the gap.
     bridge:
-      object: door
-      placement: small, just right of centre, standing on the salt flat
+      object: wooden door
+      placement: >-
+        just right of centre on the island of dry salt in the middle distance, about a third of the
+        frame height tall from threshold to lintel, casting a soft shadow rather than a reflection
       polygon:
         - [0.5012, 0.7649]
         - [0.5988, 0.7649]
@@ -151,13 +188,23 @@ scenes:
       type: zoom
   - id: endless-library
     title: The endless library
-    alt: 'Placeholder for the endless library: a soft gradient in dusty teal and lavender.'
+    alt: >-
+      An impossibly tall library of spiralling shelves and ladders where dust drifts in shafts of
+      light, with a door ajar below the shelves and an open birdcage, a globe and a lamp on a reading
+      table.
     scene: >-
-      Placeholder. Through the door, an impossibly tall library of ladders and dusty shafts of light;
-      on a reading table a brass birdcage stands with its door open.
+      Late morning inside an impossibly tall library, soft rain ticking on a glass skylight far overhead.
+      Shelves of books with plain unmarked spines spiral upward into haze, linked by wooden ladders
+      and narrow balconies, and dust drifts through slanting shafts of pale light. A tall wooden door
+      stands ajar at the foot of the nearest shelves, a fine drift of white salt across its threshold.
+      In the foreground a long reading table holds an antique globe with faded, unlabelled continents,
+      a brass reading lamp with a teal glass shade glowing amber, a few closed books, and a small
+      brass birdcage with its door wide open, empty.
     bridge:
       object: birdcage
-      placement: small, left of centre, on a reading table in the middle distance
+      placement: >-
+        left of centre on the reading table in the foreground, about a third of the frame height tall
+        from its base to the ring at the top of its dome
       polygon:
         - [0.503, 0.56]
         - [0.4615, 0.6878]
@@ -172,14 +219,24 @@ scenes:
     transition:
       type: zoom
   - id: overgrown-greenhouse
-    title: The greenhouse
-    alt: 'Placeholder for the greenhouse: a soft gradient in dusty teal and lavender.'
+    title: The overgrown greenhouse
+    alt: >-
+      An overgrown Victorian greenhouse with fogged, dripping panes in the early evening, where a
+      rusted bicycle leans against a potting bench and small birds roost around a birdcage hanging
+      from the rafters.
     scene: >-
-      Placeholder. A Victorian greenhouse reclaimed by ferns, small birds roosting where an empty
-      birdcage hangs; an old rusted bicycle leans against a bench.
+      Early evening in a Victorian greenhouse long ago reclaimed by plants, warm and humid, its glass
+      panes fogged with condensation and beaded with drops from a passing shower. Ferns, palms and
+      trailing vines spill over cast-iron staging and overrun the brick path. Small birds roost along
+      the iron rafters, gathered around an empty brass birdcage that hangs open from a hook. Cracked
+      terracotta pots and a dented watering can sit on a wooden potting bench. Leaning against the
+      bench is an old rusted bicycle with a wicker basket full of moss, a single tendril of ivy curling
+      around its frame and its tyres gone flat.
     bridge:
       object: bicycle
-      placement: small, lower left of centre, leaning against a bench
+      placement: >-
+        lower left of centre, leaning against the potting bench in the middle distance, about a quarter
+        of the frame width from wheel to wheel
       polygon:
         - [0.3, 0.4334]
         - [0.3264, 0.5554]
@@ -199,13 +256,22 @@ scenes:
       type: zoom
   - id: mountain-road-phonebox
     title: The mountain road
-    alt: 'Placeholder for the mountain road: a soft gradient in dusty teal and lavender.'
+    alt: >-
+      A wet mountain road at night above a valley lost in mist, a glowing red telephone box at the
+      hairpin bend with moths circling its light and an old bicycle leaning on the guardrail.
     scene: >-
-      Placeholder. A night mountain road, a bicycle leaning on the guardrail; at the hairpin a red
-      telephone box glows, moths circling its light above the misty valley.
+      Night on a narrow mountain road, cool and clear after rain, the asphalt still wet and gleaming.
+      The road curves along a dented steel guardrail toward a hairpin bend, and beyond the rail the
+      valley drops away into a sea of moonlit mist with dark pine ridges rising from it. In the foreground
+      an old bicycle with a wicker basket leans against the guardrail. At the hairpin stands a faded
+      red telephone box with plain blank panels, glowing warm from within, moths circling its light.
+      A row of pale marker posts follows the bend, and a single dim street lamp leans over the road
+      further on.
     bridge:
       object: telephone box
-      placement: small, lower right of centre, at the hairpin bend
+      placement: >-
+        right of centre at the hairpin bend in the middle distance, about a third of the frame height
+        tall
       polygon:
         - [0.66, 0.4734]
         - [0.7332, 0.66]
@@ -219,13 +285,22 @@ scenes:
       type: zoom
   - id: drowned-street
     title: The drowned street
-    alt: 'Placeholder for the drowned street: a soft gradient in dusty teal and lavender.'
+    alt: >-
+      A city street drowned under clear water, seen looking up from the pavement, where the hull of
+      a passing ship darkens the bright surface above drifting fish, dark shop windows and an open
+      telephone box whose handset floats on its cord.
     scene: >-
-      Placeholder. A submerged city street seen from underwater, the handset of a telephone box floating
-      on its cord; up at the surface, the dark hull of a passing ship.
+      Midday on a calm, sunny day above a city street that lies drowned under deep, clear water, seen
+      from the pavement looking gently upward. Shafts of rippling sunlight slant down from the bright
+      surface far above. Rows of shopfronts with blank fascias and dark windows line both sides, and
+      small silver fish drift past an empty bicycle rack and a leaning lamp post. On the corner stands
+      a telephone box with its door open, the handset floating up on its coiled cord. Up at the surface,
+      a passing ship's hull slides darkly across the light, its long shadow falling over the street.
     bridge:
       object: ship's hull
-      placement: small, top centre, at the water surface
+      placement: >-
+        upper centre, entirely within the frame, crossing the bright surface about a fifth of the
+        way down from the top edge, its dark underside about a third of the frame width long
       polygon:
         - [0.5, 0.0664]
         - [0.5928, 0.3268]
@@ -237,14 +312,22 @@ scenes:
     transition:
       type: zoom
   - id: fog-ship-deck
-    title: The ship in the fog
-    alt: 'Placeholder for the ship in the fog: a soft gradient in dusty teal and lavender.'
+    title: Becalmed in fog
+    alt: >-
+      The empty deck of an old sailing ship becalmed in thick fog at night, a paper lantern glowing
+      amber in the shrouds above the unattended wheel and a brass bell, the rigging fading into white.
     scene: >-
-      Placeholder. The deck of an old ship becalmed in thick fog at night, the wheel unattended above
-      the dark hull; one paper lantern glows amber in the rigging.
+      Night aboard an old wooden sailing ship becalmed in thick, windless fog. The empty deck is wet
+      and dark, water still dripping from the rigging as if the ship has just risen from the sea,
+      and over the rail the curve of the ship's hull drops into black, glassy water. The ship's wheel
+      stands unattended beside a plain brass bell hanging motionless from its frame. Ropes, shrouds
+      and furled sails rise and dissolve into white mist. Hanging in the shrouds, a single round paper
+      lantern glows warm amber, its light blooming softly in the fog.
     bridge:
       object: paper lantern
-      placement: small, right of centre, hanging in the rigging
+      placement: >-
+        right of centre, hanging in the shrouds close to the viewer at about the middle of the frame
+        height, about a quarter of the frame height tall
       polygon:
         - [0.74, 0.3524]
         - [0.8189, 0.4544]
@@ -259,13 +342,22 @@ scenes:
       type: zoom
   - id: lighthouse-gallery
     title: The lamp room
-    alt: 'Placeholder for the lamp room: a soft gradient in dusty teal and lavender.'
+    alt: >-
+      From inside a lighthouse lamp room at dusk, a stone cottage with one lit window can be seen
+      on the cliff across the inlet, beyond the great glowing lens, an oil can and a crumpled paper
+      lantern.
     scene: >-
-      Placeholder. Inside the lamp room of a lighthouse at dusk, the great lantern glowing; across
-      the bay a tiny stone cottage on a cliff has one window lit.
+      Dusk inside the lamp room at the top of a lighthouse, the sky clearing after a storm. The great
+      faceted glass lens glows warm amber right of centre, throwing rings of light across the curved
+      iron walls and the brass handrail. On the iron floor beside it lie an old oil can and a small
+      crumpled paper lantern, its candle long out. Through the tall windows, across a narrow inlet
+      of calm grey water, a stone cottage with a slate roof stands on the opposite clifftop, one window
+      lit, framed whole within a single pane. Thin mist rises off the water.
     bridge:
       object: cottage
-      placement: small, left of centre, across the bay seen through the glass
+      placement: >-
+        left of centre, seen through a single pane of the lamp-room glass on the clifftop across the
+        inlet, about a quarter of the frame height tall including roof and chimney
       polygon:
         - [0.3444, 0.4748]
         - [0.3008, 0.5523]
