@@ -256,7 +256,7 @@
     {
       "id": "balloon-salt-flats",
       "title": "The salt mirror",
-      "alt": "At dawn a lone wooden door stands upright with nothing behind it on a mirror-flat salt lake, under a fleet of motionless hot-air balloons and beside an empty wicker basket lying on the salt.",
+      "alt": "At dawn a fleet of motionless hot-air balloons hangs doubled in the reflection of a mirror-flat salt lake, with a free-standing wooden door and an overturned wicker basket out on the salt below.",
       "next": "endless-library",
       "focal": [0.55, 0.609038],
       "bridge": {
@@ -665,7 +665,7 @@
     {
       "id": "lighthouse-gallery",
       "title": "The lamp room",
-      "alt": "From inside a lighthouse lamp room at dusk, a stone cottage with one lit window can be seen on the cliff across the inlet, beyond the great glowing lens, an oil can and a crumpled paper lantern.",
+      "alt": "Inside a lighthouse lamp room at dusk, the great lens glows amber above an oil can and a crumpled paper lantern, with a small cottage on the cliff across the inlet and mist rising off the water beyond the windows.",
       "next": "cliff-cottage",
       "focal": [0.27, 0.42],
       "bridge": {

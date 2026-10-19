@@ -8,18 +8,19 @@ scenes:
       A stone cottage with one lit window stands on a stormy sea cliff, a lighthouse glowing faintly
       across the cove, waves breaking on the rocks below and a rowing boat pulled up on the shingle.
     scene: >-
-      Late afternoon under a gathering storm. A small stone cottage with a slate roof and one warmly
-      lit window stands near the edge of a high sea cliff on the left of the view, its garden gate
+      Late afternoon under a gathering storm. A stone cottage with a slate roof and one warmly lit
+      window stands near the edge of a high sea cliff, filling the left of the view, its garden gate
       hanging open in the wind. Far below, grey-green waves break against black rocks, and a small
       wooden rowing boat lies pulled up on a strip of shingle. Across the cove, on a rocky headland,
-      a pale stone lighthouse stands alone, its lamp glowing faintly amber through the rain haze.
-      Long grass lies flat along the cliff path, heavy lavender clouds roll in from the sea, and a
-      thin mist hangs over the water.
+      stands a stout pale stone lighthouse with a broad base and a railed lamp gallery, its lamp glowing
+      faintly amber through the rain haze. Long grass lies flat along the cliff path, heavy lavender
+      clouds roll in from the sea, and a thin mist hangs over the water.
     bridge:
       object: lighthouse
       placement: >-
-        right of centre on the headland across the cove, in the upper middle of the frame, the whole
-        tower about two-fifths of the frame height tall
+        right of centre on the headland across the cove, a stout tower with a broad base and a railed
+        lamp gallery, about half the frame height tall, its top about a fifth of the way down from
+        the upper edge
       polygon:
         - [0.7732, 0.3]
         - [0.7718, 0.3254]
@@ -148,9 +149,9 @@ scenes:
   - id: balloon-salt-flats
     title: The salt mirror
     alt: >-
-      At dawn a lone wooden door stands upright with nothing behind it on a mirror-flat salt lake,
-      under a fleet of motionless hot-air balloons and beside an empty wicker basket lying on the
-      salt.
+      At dawn a fleet of motionless hot-air balloons hangs doubled in the reflection of a mirror-flat
+      salt lake, with a free-standing wooden door and an overturned wicker basket out on the salt
+      below.
     scene: >-
       Dawn over a vast salt lake covered by a thin sheet of still water, so flat it mirrors the whole
       sky. A fleet of hot-air balloons in faded plain stripes hangs motionless at different heights,
@@ -343,9 +344,9 @@ scenes:
   - id: lighthouse-gallery
     title: The lamp room
     alt: >-
-      From inside a lighthouse lamp room at dusk, a stone cottage with one lit window can be seen
-      on the cliff across the inlet, beyond the great glowing lens, an oil can and a crumpled paper
-      lantern.
+      Inside a lighthouse lamp room at dusk, the great lens glows amber above an oil can and a crumpled
+      paper lantern, with a small cottage on the cliff across the inlet and mist rising off the water
+      beyond the windows.
     scene: >-
       Dusk inside the lamp room at the top of a lighthouse, the sky clearing after a storm. The great
       faceted glass lens glows warm amber right of centre, throwing rings of light across the curved

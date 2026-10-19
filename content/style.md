@@ -7,7 +7,7 @@ Everything outside that paragraph is guidance for people and is never sent to a 
 
 ## Style block
 
-A still, dreamlike scene in soft painterly realism, like a cinematic matte painting with gentle brushwork. Diffused light through a faint haze, long soft shadows, thin mist softening the distance. Muted palette of dusty teal, slate blue and lavender, with a warm amber glow on every light source. Gentle bloom around lights, fine film grain, slightly lifted blacks, a subtle vignette. Wide establishing shot from eye level, 35 mm lens, deep depth of field. The place is deserted and quiet, as if everyone has just left. No people, figures or faces anywhere, and every surface is plain and unmarked, with no lettering, signs, logos or watermarks. Calm, melancholic, inviting.
+A still, dreamlike scene in soft painterly realism, like a cinematic matte painting with gentle brushwork. Diffused light through a faint haze, long soft shadows, thin mist softening the distance. Muted palette of dusty teal, slate blue and lavender, with a warm amber glow on every light source. Gentle bloom around lights, fine film grain, slightly lifted blacks, a subtle vignette. Wide establishing shot from eye level, 35 mm lens, deep depth of field. The place is deserted and quiet, as if everyone has just left. No people, no faces, no legible text, no signs, no logos, no watermarks. Calm, melancholic, inviting.
 
 ## Do not
 
