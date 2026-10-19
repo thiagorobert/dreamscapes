@@ -2,15 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
       content="One dreamlike scene at a time. Find what leads to the next."
     />
+    <meta name="theme-color" content="#1f2a38" />
+    <!-- Fetch the manifest while the script loads; main.ts reuses this response. -->
+    <link rel="preload" href="%BASE_URL%scenes.json" as="fetch" crossorigin="anonymous" />
     <title>Dreamscapes</title>
   </head>
   <body>
-    <main id="app"></main>
+    <main id="app" class="app"></main>
     <noscript>Dreamscapes needs JavaScript to show its scenes.</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>

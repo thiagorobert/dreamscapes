@@ -1,8 +1,16 @@
 {
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
-    "lib": ["ES2022"],
-    "types": ["node"]
+    // The unit tests import the site's modules, which use the DOM and Vite's import.meta.env.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"]
   },
-  "include": ["tests", "e2e", "vite.config.ts", "vitest.config.ts", "playwright.config.ts"]
+  "include": [
+    "tests",
+    "e2e",
+    "scripts",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ]
 }

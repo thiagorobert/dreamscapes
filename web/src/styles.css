@@ -2,15 +2,378 @@
   color-scheme: dark;
   --background: #1f2a38;
   --foreground: #dcd6ea;
+  --gutter: 16px;
+  --chrome-rest-opacity: 0.4;
+  --chrome-shadow: 0 1px 3px rgb(10 14 22 / 0.6);
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
   margin: 0;
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
+  overflow: hidden;
+  overscroll-behavior: none;
   background: var(--background);
   color: var(--foreground);
   font-family: system-ui, sans-serif;
+}
+
+.app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* ---- Stage ---------------------------------------------------------------------------- */
+
+.stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* The stage handles drags itself (panning), so the browser must not scroll or zoom on them. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stage.is-panning {
+  cursor: grabbing;
+}
+
+.is-transitioning .stage {
+  pointer-events: none;
+}
+
+.scene-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.scene-art {
+  position: absolute;
+  inset: 0;
+  /* The placeholder: the layer already has the image's aspect ratio. */
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.scene-art picture,
+.scene-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.scene-art img {
+  opacity: 0;
+  transition: opacity 600ms ease;
+  -webkit-user-drag: none;
+}
+
+.scene-art img.is-loaded {
+  opacity: 1;
+}
+
+/* ---- Hotspot ------------------------------------------------------------------------- */
+
+.hotspot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* Only the polygon takes pointer input; everything else falls through to the stage. */
+  pointer-events: none;
+}
+
+.hotspot-shape {
+  cursor: pointer;
+  outline: none;
+}
+
+.hotspot-glow {
+  opacity: 0;
+}
+
+.hotspot-sweep {
+  transform-box: fill-box;
+  transform: translateX(-100%);
+}
+
+.hotspot.is-shimmering .hotspot-glow {
+  opacity: 1;
+}
+
+.hotspot.is-shimmering .hotspot-sweep {
+  animation: hotspot-sweep 1200ms ease-in-out forwards;
+}
+
+@keyframes hotspot-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* The reduced-motion hint and the loading pulse: a still, soft lift of the object. */
+.hotspot.is-highlighted .hotspot-glow,
+.hotspot.is-pending .hotspot-glow {
+  opacity: 1;
+}
+
+.hotspot.is-highlighted .hotspot-sweep,
+.hotspot.is-pending .hotspot-sweep {
+  transform: none;
+  fill: rgb(255 248 236 / 0.28);
+}
+
+.hotspot.is-pending .hotspot-glow {
+  animation: hotspot-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes hotspot-pulse {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---- Transitions ---------------------------------------------------------------------- */
+
+.bloom {
+  position: absolute;
+  width: 90vmax;
+  height: 90vmax;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle closest-side,
+    rgb(255 255 255) 0%,
+    rgb(255 255 255 / 0.55) 40%,
+    rgb(255 255 255 / 0) 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+}
+
+.morph {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.morph video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.offscreen {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 2px;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- Chrome: wordmark and depth counter ------------------------------------------------- */
+
+.chrome {
+  position: fixed;
+  z-index: 2;
+  margin: 0;
+  pointer-events: none;
+  color: var(--foreground);
+  text-shadow: var(--chrome-shadow);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  opacity: 0.85;
+  animation: chrome-rest 1200ms ease 2s forwards;
+}
+
+.wordmark {
+  top: max(var(--gutter), env(safe-area-inset-top));
+  left: max(var(--gutter), env(safe-area-inset-left));
+  text-transform: lowercase;
+}
+
+.depth {
+  right: max(var(--gutter), env(safe-area-inset-right));
+  bottom: max(var(--gutter), env(safe-area-inset-bottom));
+  font-variant-numeric: tabular-nums;
+  opacity: var(--chrome-rest-opacity);
+  animation: none;
+}
+
+/* Set again on every change, so a new count shows brightly before fading back. */
+.depth.is-fresh {
+  animation: chrome-wake 1200ms ease 2s backwards;
+}
+
+@keyframes chrome-rest {
+  to {
+    opacity: var(--chrome-rest-opacity);
+  }
+}
+
+@keyframes chrome-wake {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: var(--chrome-rest-opacity);
+  }
+}
+
+/* ---- Hints ---------------------------------------------------------------------------- */
+
+.ripple {
+  position: fixed;
+  z-index: 3;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border: 1.5px solid rgb(255 255 255 / 0.55);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgb(255 255 255 / 0.18);
+  pointer-events: none;
+  animation: ripple 700ms ease-out forwards;
+}
+
+@keyframes ripple {
+  from {
+    transform: scale(0.25);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: max(var(--gutter), env(safe-area-inset-top))
+    max(var(--gutter), env(safe-area-inset-right)) max(var(--gutter), env(safe-area-inset-bottom))
+    max(var(--gutter), env(safe-area-inset-left));
+  background: rgb(16 21 32 / 0.5);
+  cursor: pointer;
+  transition: opacity 400ms ease;
+  animation: intro-in 600ms ease both;
+}
+
+.intro p {
+  max-width: 24ch;
+  margin: 0;
   text-align: center;
+  text-shadow: var(--chrome-shadow);
+  font-size: clamp(1.15rem, 2.6vw, 1.7rem);
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+}
+
+.intro.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes intro-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---- Accessibility ---------------------------------------------------------------------- */
+
+.visually-hidden,
+.continue:not(:focus-visible) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Shown only while focused from the keyboard, so sighted keyboard users can see it. */
+.continue:focus-visible {
+  position: fixed;
+  z-index: 5;
+  bottom: max(var(--gutter), env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.6em 1.1em;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: 999px;
+  background: rgb(20 26 38 / 0.82);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 14px;
+  outline: 2px solid var(--foreground);
+  outline-offset: 2px;
+}
+
+.continue[aria-disabled='true'] {
+  cursor: progress;
+}
+
+.notice {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--gutter);
+  text-align: center;
+}
+
+/* ---- Reduced motion --------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .ripple {
+    animation: ripple-still 500ms linear forwards;
+  }
+
+  .hotspot.is-shimmering .hotspot-sweep {
+    animation: none;
+    transform: none;
+    fill: rgb(255 248 236 / 0.28);
+  }
+
+  .hotspot.is-pending .hotspot-glow {
+    animation: none;
+  }
+}
+
+@keyframes ripple-still {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 0;
+  }
 }
