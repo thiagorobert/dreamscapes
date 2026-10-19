@@ -11,7 +11,7 @@ from dreamscapes_pipeline import select as selection
 from dreamscapes_pipeline.cli import app
 from dreamscapes_pipeline.layout import MASTER_HEIGHT, MASTER_WIDTH
 from dreamscapes_pipeline.manifest import load_manifest
-from tests.conftest import file_hashes
+from tests.conftest import PLACEHOLDER_SCENE_COUNT, file_hashes
 from tests.fakes import MASTER_SIZE, FakeAnthropicClient, offline, write_style  # noqa: F401
 from tests.test_cli import plain_help
 
@@ -57,7 +57,8 @@ def test_generate_all_on_a_fresh_checkout_plans_only_the_anchor(in_placeholder_r
     assert result.exit_code == 0, result.output
     assert "cliff-cottage cand-1" in result.output and "request 1 of 1" in result.output
     assert "prison-yard cand-1" not in result.output
-    assert "skipped 9 scene(s) until the style anchor is ready" in result.output
+    skipped = PLACEHOLDER_SCENE_COUNT - 1
+    assert f"skipped {skipped} scene(s) until the style anchor is ready" in result.output
     assert "dsp select --scene cliff-cottage" in result.output
 
 
@@ -148,7 +149,7 @@ def test_export_and_check(in_placeholder_repo):
     before = file_hashes(in_placeholder_repo.root)
     result = runner.invoke(app, ["export", "--check"])
     assert result.exit_code == 0, result.output
-    assert "up to date (10 scenes)" in result.output
+    assert f"up to date ({PLACEHOLDER_SCENE_COUNT} scenes)" in result.output
     result = runner.invoke(app, ["export"])
     assert result.exit_code == 0, result.output
     assert "0 file(s) changed" in result.output and "scenes.json is unchanged" in result.output

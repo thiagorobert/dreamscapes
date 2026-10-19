@@ -20,7 +20,7 @@ from dreamscapes_pipeline.grade import (
 from dreamscapes_pipeline.layout import MASTER_HEIGHT, MASTER_WIDTH
 from dreamscapes_pipeline.manifest import load_manifest
 from dreamscapes_pipeline.placeholders import is_placeholder_image
-from tests.conftest import file_hashes
+from tests.conftest import PLACEHOLDER_SCENE_COUNT, file_hashes
 from tests.fakes import offline, write_master  # noqa: F401
 
 # content/grade.toml as the content package wrote it; the grade must read exactly these keys.
@@ -186,13 +186,13 @@ def test_placeholder_graded_copies_are_left_alone_and_preview_shows_them(placeho
     before = file_hashes(placeholder_repo.root)
     manifest = load_manifest(placeholder_repo.scenes_yaml)
     report = run_grade(placeholder_repo, manifest)
-    assert report.written == [] and len(report.placeholders) == 10
+    assert report.written == [] and len(report.placeholders) == PLACEHOLDER_SCENE_COUNT
     assert file_hashes(placeholder_repo.root) == before
 
     report = run_grade(placeholder_repo, manifest, preview=True)
     assert report.preview_page == placeholder_repo.review / "grade.html"
     html = report.preview_page.read_text()
-    assert html.count("<figcaption") == 20
+    assert html.count("<figcaption") == 2 * PLACEHOLDER_SCENE_COUNT
     assert "built-in defaults" in html
     for _, before_rel, after_rel in report.previews:
         assert (placeholder_repo.review / before_rel).exists()

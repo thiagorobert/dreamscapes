@@ -25,6 +25,7 @@ from dreamscapes_pipeline.imaging import sha256_file
 from dreamscapes_pipeline.manifest import load_manifest
 from dreamscapes_pipeline.providers import FakeImageProvider, GenerationResult, ProviderError
 from dreamscapes_pipeline.spend import SpendGuard
+from tests.conftest import PLACEHOLDER_SCENE_COUNT
 from tests.fakes import offline, write_style  # noqa: F401
 
 ROW_FIELDS = {
@@ -419,6 +420,6 @@ def test_all_on_a_fresh_checkout_generates_the_anchor_and_waits_for_the_rest(pla
     assert [n for n, _ in existing_candidates(placeholder_repo, "cliff-cottage")] == [1]
     assert existing_candidates(placeholder_repo, "prison-yard") == []
     text = "\n".join(lines)
-    assert "skipped 9 scene(s) until the style anchor is ready" in text
+    assert f"skipped {PLACEHOLDER_SCENE_COUNT - 1} scene(s) until the style anchor is ready" in text
     assert "dsp select --scene cliff-cottage" in text
     assert "spend recorded in the generation log so far: $0.01 over 1 call(s)" in text

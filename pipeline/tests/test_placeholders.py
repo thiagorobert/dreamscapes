@@ -15,18 +15,7 @@ from dreamscapes_pipeline.placeholders import (
 from dreamscapes_pipeline.validate import validate_repo
 from tests.conftest import file_hashes
 
-SLUGS = [
-    "cliff-cottage",
-    "prison-yard",
-    "rooftop-court",
-    "balloon-salt-flats",
-    "endless-library",
-    "overgrown-greenhouse",
-    "mountain-road-phonebox",
-    "drowned-street",
-    "fog-ship-deck",
-    "lighthouse-gallery",
-]
+SLUGS = [p.id for p in PLACEHOLDER_SCENES]
 
 
 def test_writes_every_artifact(placeholder_repo):

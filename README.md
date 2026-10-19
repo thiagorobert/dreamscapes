@@ -7,6 +7,8 @@ towers, a basketball hoop leads to a rooftop court, and so on. Ten scenes form a
 the walk never ends. Everything is generated offline by a Python pipeline and committed; the
 site is a static Vite + TypeScript page with no backend.
 
+**Live site:** <https://blog.thiago.pub/dreamscapes/> (GitHub Pages, deployed from `main`).
+
 The architecture and implementation plan lives in
 [`docs/plans/2026-10-19-dreamscapes-v1-plan.md`](docs/plans/2026-10-19-dreamscapes-v1-plan.md).
 
@@ -28,8 +30,9 @@ tools/annotate/   manual hotspot editor
 docs/plans/       the plan
 ```
 
-The committed placeholder scenes (soft gradients, one glowing shape per scene) let the site run
-in a fresh clone with no API keys. Real scenes replace them once they are generated.
+The ten generated scenes, their exports and the morph clips are all committed, so the site runs
+in a fresh clone with no API keys. `dsp placeholders` can still paint synthetic stand-ins (soft
+gradients, one glowing shape per scene) for any scene that has no real master yet.
 
 ## Running the site
 
@@ -54,6 +57,17 @@ GitHub Pages serves the site from `/dreamscapes/`, so the deploy workflow builds
 for the root path `/`. To test a Pages build locally:
 `GITHUB_PAGES=1 pnpm build && GITHUB_PAGES=1 pnpm e2e`.
 
+`pnpm walk <url>` checks a deployed copy, for example
+`pnpm walk https://blog.thiago.pub/dreamscapes/`. Unlike `pnpm e2e`, which tests a local build
+with the morph clips swapped for the quicker zoom, it drives the real site with its real clips,
+at 1440x900 and in the iPhone 13 profile. Each profile starts fresh and dismisses the first-visit
+overlay. It clicks or taps the centroid of every scene's hotspot polygon, and checks the address,
+the counter and the transition played at each step, plus the return to the start after the
+last scene. Then it checks back, forward, a deep link and an unknown hash. It prints every console
+error and failed request, and exits 1 if any check fails. `--json <file>` saves the report and
+`--screenshots <dir>` saves one picture per step. The walk takes about three minutes, because
+each clip plays for eight seconds.
+
 ## Running the pipeline
 
 Needs [uv](https://docs.astral.sh/uv/); it installs Python 3.12 itself. Copy `.env.example` to
@@ -73,7 +87,7 @@ uv run dsp --help
 | `dsp validate [--strict]` | Checks the manifest, hotspot rules, the loop and every referenced file. Exits 1 on errors (or on warnings with `--strict`). | no |
 | `dsp schema [--check]` | Writes `schema/scenes.schema.json` from the pipeline's models; `--check` only verifies it. | no |
 | `dsp placeholders [--overwrite-masters] [--reset-manifest]` | Writes synthetic masters, masks, exports and `web/public/scenes.json`. Keeps real masters unless `--overwrite-masters`, and an existing `content/scenes.yaml` unless `--reset-manifest`; each flag destroys that kind of work. | no |
-| `dsp generate --scene <id> \| --all [--candidates 4] [--provider gemini\|openai] [--no-reference] [--force] [--size 2K] [--quality high] [--dry-run]` | Builds each prompt from the style block in `content/style.md` and the scene, attaches the ungraded style-anchor master (except for the anchor itself), and writes `assets/candidates/<scene>/cand-<n>.png`. Skips existing candidates unless `--force`. While the anchor's master is still a placeholder, `--all` generates only the anchor and asks you to select it first. Logs every call to `pipeline/logs/generations.jsonl`. | yes |
+| `dsp generate --scene <id> \| --all [--candidates 4] [--provider gemini\|openai] [--no-reference] [--force] [--size 2K] [--quality high] [--model id] [--dry-run]` | Builds each prompt from the style block in `content/style.md` and the scene, attaches the ungraded style-anchor master (except for the anchor itself), and writes `assets/candidates/<scene>/cand-<n>.png`. Skips existing candidates unless `--force`. While the anchor's master is still a placeholder, `--all` generates only the anchor and asks you to select it first. Logs every call to `pipeline/logs/generations.jsonl`. | yes |
 | `dsp select --scene <id> \| --all [--repick] [--allow-upscale] [--dry-run]` | Claude scores the candidates against the rubric, writes `assets/review/<scene>/scores.json` and a contact sheet, records the winner in `content/scenes.yaml` (unless one is already pinned) and copies it to `assets/masters/<scene>.png`. The anchor is selected first, so the other scenes in the same run are judged against its new master. A winner smaller than 2048x1152 is refused unless `--allow-upscale`. | yes |
 | `dsp grade [--preview]` | Applies the colour grade from `content/grade.toml` to every master, writing `<scene>.graded.png`; `--preview` writes before/after pairs to `assets/review/grade.html`. Placeholder masters keep their graded copy. | no |
 | `dsp hotspot --scene <id> \| --all [--force] [--box x0 y0 x1 y1] [--dry-run]` | Segments the bridge object into a hotspot polygon, has Claude verify it, and writes it to `content/scenes.yaml`. `--dry-run` needs no keys. | yes |
@@ -149,17 +163,12 @@ plus a short "drift toward the bridge object and dissolve into the next scene" p
 $0.12 per second of video, $0.96 per clip. Veo always adds a soundtrack, so ffmpeg (needed on
 the PATH: `brew install ffmpeg`) drops it and re-encodes the video as H.264 (CRF 23, yuv420p,
 `+faststart`); a clip that is over 5 MB at 1080p is scaled to 720p before the quality is
-lowered. The raw download is kept locally in `assets/candidates/morphs/`, so a clip whose
-post-processing failed is finished on the next run without paying again.
-
-Every clip needs a look before it ships: Veo can add motion, people or text that break the
-mood. `assets/review/morphs/index.html` shows, per edge, the two masters with the clip's first,
-middle and last frames between them, a contact sheet of eight frames, the clip itself, and how
-far the first and last frames are from the masters (mean absolute difference, 0-255). To reject
-a clip, set that scene's `transition` back to `type: zoom`, delete the clip and run
-`uv run dsp export`. From then on `--all` leaves that edge alone: it neither re-encodes the
-saved download nor pays for a new render. Naming the edge with `--edge <a> <b>` renders a new
-one. The site falls back to the zoom whenever a clip fails or is slow to load.
+lowered. Every 1080p encode so far came out between 6 and 9 MB, so all nine committed clips are
+1280x720 (1.8 to 3.9 MB each). The raw download is kept locally in `assets/candidates/morphs/`,
+so a clip whose post-processing failed is finished on the next run without paying again. The
+site falls back to the zoom whenever a clip fails or is slow to load. Reviewing, re-rendering
+and rejecting clips are covered in
+[How to re-render or reject a morph clip](#how-to-re-render-or-reject-a-morph-clip).
 
 A call that fails after Veo accepted it is still counted in the generation log and against
 the spend limit: a video that finished is billed even if its download failed, and one still
@@ -168,6 +177,132 @@ operation name and `retrievable_until`, the moment Google deletes the video (two
 
 Checks: `uv run pytest -q`, `uv run ruff check .`, `uv run ruff format --check .`
 (`uv run ruff format .` to fix).
+
+## How to regenerate a scene
+
+Run these from `pipeline/` with the keys in `.env`. Every paid step prints its estimate first,
+and `--dry-run` shows the requests without sending them.
+
+1. Optionally improve the prompt first: edit the scene's `scene` description or its
+   `bridge.placement` in `content/scenes.yaml` (in v1 the usual reason to regenerate was a
+   bridge object that came out under 1.5% of the frame, fixed by asking for it nearer and
+   bigger).
+2. `uv run dsp generate --scene <id> --force` replaces the scene's candidates in
+   `assets/candidates/<id>/` (four by default; `--candidates 6` for more). The style anchor's
+   ungraded master is attached as the style reference, as before. Gemini at 2K costs about
+   $0.06 per candidate.
+3. `uv run dsp select --scene <id> --repick` has Claude score the new candidates (about $0.08)
+   and copies the winner to `assets/masters/<id>.png`. `--repick` is required here: the scene
+   already has a `generation.selected_candidate` from its first run, and without the flag
+   `select` copies that candidate number from the new set without scoring anything. To choose
+   by eye instead, look at the candidates, set `generation.selected_candidate` to your pick and
+   run `uv run dsp select --scene <id>`, which copies it without a Claude call.
+4. `uv run dsp grade` writes the new `<id>.graded.png`. The grade is deterministic, so the other
+   scenes' graded copies come out unchanged.
+5. `uv run dsp hotspot --scene <id>` traces the bridge object on the new picture, has Claude
+   check the outline, and replaces the polygon and the mask. Look at
+   `assets/review/<id>/hotspot.png`. If the scene ends up `needs_manual_hotspot`, draw the
+   outline with `tools/annotate/index.html` (see its README) and paste it into the YAML.
+6. `uv run dsp validate`, then `uv run dsp export`, which writes the new AVIF and WebP files
+   under new hashed names, removes the old ones and updates `web/public/scenes.json`.
+7. Re-render the two morph clips that touch the scene: the clip arriving from the previous scene
+   ends on the old picture, and the clip leaving for the next scene starts on it.
+   `uv run dsp morph --all --dry-run` lists them (it compares the graded masters each clip was
+   made from with the current ones), and `uv run dsp morph --all` renders them at $0.96 each.
+   Review them as described in
+   [How to re-render or reject a morph clip](#how-to-re-render-or-reject-a-morph-clip).
+   `--keep-stale` keeps the old clips instead, at the price of a visible jump between the clip
+   and the new still.
+8. `uv run dsp review`, then `cd ../web && pnpm build && pnpm e2e`. Commit
+   `content/scenes.yaml`, `assets/masters/`, `assets/masks/`, `web/public/` and
+   `pipeline/logs/generations.jsonl`.
+
+Regenerating the style anchor (`style_anchor` in `content/scenes.yaml`, the cliff cottage) also
+changes the reference image every other scene was generated from. The other scenes keep their
+masters (each has its candidate pinned), so check `assets/review/index.html`, which shows all
+the graded masters side by side, and regenerate any scene that no longer fits the set.
+
+## How to add a scene
+
+The loop is the chain of `next` pointers in `content/scenes.yaml`. A new scene goes between two
+neighbours: A, and B, which is A's `next` today.
+
+1. **Write the entry** in `content/scenes.yaml`, following the existing ones:
+   - `id`: a new slug. `title`, and `alt`, which describes the scene and never says where the
+     object is.
+   - `scene`: 60-120 words for the image prompt. Show A's bridge object again in some form
+     (`dsp validate` warns when the description does not mention it), and name two or three
+     distractor objects. No people, faces, legible text, signs or logos.
+   - `bridge.object`: a short noun phrase that also works as a segmentation prompt
+     ("telephone box").
+   - `bridge.placement`: where the object sits in the frame and how big it is.
+   - `next: B`. Leave out `transition` (it defaults to the zoom), `polygon` and `generation`;
+     the pipeline fills them in.
+2. **Respect the placement rules** (plan section 4.4), which `dsp validate` enforces once the
+   hotspot exists. There is exactly one bridge object, and it is not the main subject. Its
+   outline covers 1.5% to 12% of the frame. Its centroid lies in the central 60% of the width
+   (x 0.2-0.8) and the central 80% of the height (y 0.1-0.9). Ask for the object at a size and
+   position inside those bounds, such as "medium, just right of centre, mid-distance".
+3. **Re-point the loop.** Set A's `next` to the new id. B's description should mention the new
+   scene's bridge object (the same warning applies): pick an object B already shows, or edit
+   B's description and regenerate B. If A's `transition` is a clip (`type: video`), set it back
+   to `type: zoom` (remove its `video` and `duration` lines) and delete A's old clip,
+   `web/public/morphs/<A>__<B>.<hash>.mp4`: it morphs into B, not into the new scene.
+4. **Placeholders**, if the branch must stay green before the real images exist. Until then
+   `dsp validate` fails on the missing master and `dsp export` cannot build `scenes.json`. Add
+   a stand-in for the new id to `PLACEHOLDER_SCENES` in
+   `pipeline/dreamscapes_pipeline/placeholders.py`. That is a
+   `PlaceholderScene(id, title, scene, bridge_object, placement, next, design=Design(...))`
+   whose `Design` draws a shape that obeys the rules above. Put the entry between A's and B's,
+   and re-point A's entry and the new entry exactly as in step 3. The table must stay in loop
+   order with its `next` pointers forming one loop, because `dsp placeholders --reset-manifest`
+   rebuilds the manifest from it. The pipeline's test fixtures are also built from this table,
+   and the tests take their scene counts and the loop's last scene from it, so they follow
+   along. Then run `uv run dsp placeholders` (it paints only scenes that have no real master)
+   and `uv run dsp export`. Otherwise keep the work on a branch until step 5 is done.
+5. **Run the pipeline** for the new scene, as for regenerating but without `--force` or
+   `--repick`: `uv run dsp generate --scene <id>`, `uv run dsp select --scene <id>`,
+   `uv run dsp grade`, `uv run dsp hotspot --scene <id>`, `uv run dsp validate` and
+   `uv run dsp export`.
+6. **Morph clips** for the two new edges: `uv run dsp morph --edge <A> <id>` and
+   `uv run dsp morph --edge <id> <B>`. `uv run dsp morph --all` also works. It renders the
+   edges that have no clip and were never rejected. It also re-renders any clip whose graded
+   masters changed since it was made, such as the clips next to a regenerated B. Like every paid
+   command it prints the estimated spend first, so run it with `--dry-run` to see which edges
+   it picks. Review the clips as below.
+7. `uv run dsp review`, then `cd ../web && pnpm build && pnpm e2e`. The end-to-end tests read
+   the loop from `scenes.json`, so they walk the longer loop without changes. Commit the same
+   paths as for a regenerated scene.
+
+## How to re-render or reject a morph clip
+
+Every clip needs a look before it ships, because Veo can add motion, people or lettering that
+break the mood. In v1 all three takes of mountain-road-phonebox -> drowned-street wrote garbled
+lettering on the phone box or the shopfronts, which is why that edge keeps the zoom. After any render, open
+`assets/review/morphs/index.html`. Each edge gets a row: the two masters with the clip's first,
+middle and last frames between them, an eight-frame contact sheet and the clip itself. It also
+says how far the end frames are from the masters (mean absolute difference, 0-255; the shipped
+clips score 2.4 to 10).
+
+- **Re-render one clip:** `uv run dsp morph --edge <a> <b> --force` (B must be A's `next`).
+  It pays for a new render ($0.96), writes the clip under a new hashed name, removes the old
+  file and updates `content/scenes.yaml` and `scenes.json`. Without `--force`, an edge whose
+  clip is in place and whose masters have not changed is skipped.
+- **After a master changed:** `uv run dsp morph --all` re-renders exactly the clips whose first
+  or last graded master changed since they were made, with a warning for each; `--keep-stale`
+  keeps them.
+- **Re-encode without paying:** `uv run dsp morph --all --reencode` (or
+  `--edge <a> <b> --reencode`) rebuilds clips from the saved Veo downloads after a change to
+  the ffmpeg settings. Those downloads live in `assets/candidates/morphs/`, which is
+  git-ignored, so this only works on the machine that rendered them.
+- **Reject a clip:** in `content/scenes.yaml` set the scene's `transition` back to `type: zoom`
+  (delete its `video` and `duration` lines), delete the clip from `web/public/morphs/`, and run
+  `uv run dsp export`. From then on `--all` leaves that edge alone: it neither re-encodes the
+  saved download nor pays for a new render. To try that edge again later, name it:
+  `uv run dsp morph --edge <a> <b>`.
+
+Then run `cd ../web && pnpm build && pnpm e2e`, and commit `content/scenes.yaml`,
+`web/public/` and `pipeline/logs/generations.jsonl`.
 
 ## Continuous integration
 
