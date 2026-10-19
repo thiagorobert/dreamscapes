@@ -92,4 +92,4 @@ def test_placeholders_command_reports_what_it_did(placeholder_repo, monkeypatch)
     result = runner.invoke(app, ["placeholders"])
     assert result.exit_code == 0, result.output
     assert "kept existing content/scenes.yaml" in result.output
-    assert "wrote web/public/scenes.json" in result.output
+    assert "web/public/scenes.json is unchanged" in result.output

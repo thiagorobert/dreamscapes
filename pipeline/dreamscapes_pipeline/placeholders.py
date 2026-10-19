@@ -22,6 +22,7 @@ import io
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -430,13 +431,17 @@ def is_placeholder_image(path: Path) -> bool:
 # --------------------------------------------------------------------------------------------
 
 
+FileStatus = Literal["written", "unchanged", "kept", "skipped"]
+
+
 @dataclass
 class PlaceholderReport:
     rendered: list[str] = field(default_factory=list)
     kept: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
-    wrote_manifest: bool = False
-    wrote_scenes_json: bool = False
+    # "kept": an existing authored file was left alone; "skipped": nothing could be written.
+    manifest: FileStatus = "kept"
+    scenes_json: FileStatus = "skipped"
 
 
 def _write_if_changed(path: Path, data: bytes) -> bool:
@@ -481,8 +486,8 @@ def run_placeholders(paths: RepoPaths, force: bool = False) -> PlaceholderReport
         report.rendered.append(scene.id)
 
     if not yaml_exists or force:
-        _write_if_changed(paths.scenes_yaml, dump_manifest(manifest).encode("utf-8"))
-        report.wrote_manifest = True
+        changed = _write_if_changed(paths.scenes_yaml, dump_manifest(manifest).encode("utf-8"))
+        report.manifest = "written" if changed else "unchanged"
 
     if len(images) == len(manifest.scenes):
         built = BuiltManifest(
@@ -490,8 +495,8 @@ def run_placeholders(paths: RepoPaths, force: bool = False) -> PlaceholderReport
             start=manifest.start,
             scenes=[build_scene(s, images[s.id], polygons[s.id]) for s in manifest.scenes],
         )
-        _write_if_changed(paths.scenes_json, dump_built_manifest(built).encode("utf-8"))
-        report.wrote_scenes_json = True
+        changed = _write_if_changed(paths.scenes_json, dump_built_manifest(built).encode("utf-8"))
+        report.scenes_json = "written" if changed else "unchanged"
     else:
         missing = [s.id for s in manifest.scenes if s.id not in images]
         report.notes.append(

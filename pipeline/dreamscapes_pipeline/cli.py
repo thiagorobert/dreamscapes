@@ -117,12 +117,16 @@ def placeholders(
         typer.echo(f"placeholder scenes: {', '.join(report.rendered)}")
     if report.kept:
         typer.echo(f"kept real masters: {', '.join(report.kept)}")
-    if report.wrote_manifest:
-        typer.echo("wrote content/scenes.yaml")
-    else:
-        typer.echo("kept existing content/scenes.yaml")
-    if report.wrote_scenes_json:
+    manifest_messages = {
+        "written": "wrote content/scenes.yaml",
+        "unchanged": "content/scenes.yaml is unchanged",
+        "kept": "kept existing content/scenes.yaml",
+    }
+    typer.echo(manifest_messages.get(report.manifest, ""))
+    if report.scenes_json == "written":
         typer.echo("wrote web/public/scenes.json")
+    elif report.scenes_json == "unchanged":
+        typer.echo("web/public/scenes.json is unchanged")
     for note in report.notes:
         typer.echo(f"note: {note}")
 

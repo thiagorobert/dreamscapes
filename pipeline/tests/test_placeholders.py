@@ -77,7 +77,7 @@ def test_second_run_changes_nothing(placeholder_repo):
     before = file_hashes(placeholder_repo.root)
     report = run_placeholders(placeholder_repo)
     assert file_hashes(placeholder_repo.root) == before
-    assert report.wrote_scenes_json and not report.wrote_manifest
+    assert report.scenes_json == "unchanged" and report.manifest == "kept"
 
 
 def test_real_masters_are_never_overwritten(placeholder_repo):
@@ -90,7 +90,7 @@ def test_real_masters_are_never_overwritten(placeholder_repo):
 
     assert real.read_bytes() == real_bytes
     assert report.kept == ["prison-yard"]
-    assert not report.wrote_scenes_json
+    assert report.scenes_json == "skipped"
     assert placeholder_repo.scenes_json.read_bytes() == scenes_json
 
 
@@ -118,7 +118,9 @@ def test_force_restores_placeholder_content(placeholder_repo):
 
     report = run_placeholders(placeholder_repo, force=True)
 
-    assert report.wrote_manifest and report.wrote_scenes_json
+    assert report.manifest == "written"
+    # Restoring the original placeholder content gives back the original scenes.json.
+    assert report.scenes_json == "unchanged"
     assert load_manifest(placeholder_repo.scenes_yaml) == placeholder_manifest()
     assert is_placeholder_image(real)
 
