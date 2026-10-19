@@ -325,25 +325,34 @@ scenes:
         lower left of centre, leaning against the potting bench in the middle distance, about a quarter
         of the frame width from wheel to wheel
       polygon:
-        - [0.3, 0.4334]
-        - [0.3264, 0.5554]
-        - [0.3998, 0.5623]
-        - [0.3427, 0.6447]
-        - [0.3617, 0.771]
-        - [0.3, 0.6999]
-        - [0.2383, 0.771]
-        - [0.2573, 0.6447]
-        - [0.2002, 0.5623]
-        - [0.2736, 0.5554]
-      source: placeholder
-      verified: false
+        - [0.322, 0.61]
+        - [0.352, 0.588]
+        - [0.403, 0.574]
+        - [0.439, 0.578]
+        - [0.442, 0.598]
+        - [0.468, 0.617]
+        - [0.498, 0.655]
+        - [0.512, 0.725]
+        - [0.512, 0.8]
+        - [0.49, 0.845]
+        - [0.463, 0.86]
+        - [0.405, 0.893]
+        - [0.366, 0.923]
+        - [0.33, 0.897]
+        - [0.315, 0.815]
+        - [0.325, 0.74]
+        - [0.322, 0.69]
+      source: manual
+      verified: true
       verification: >-
-        Not verified after 2 attempts. Attempt 1: The outline covers only the top of the bicycle's
-        front basket with its spilling greenery, plus the flowerpots on the bench behind it; it misses
-        the frame, wheels, and seat of the bicycle. Attempt 2: The outline covers most of the bicycle
-        (both wheels, frame, saddle and handlebars), but its upper-left edge cuts diagonally through
-        the wicker basket on the front. A good part of the basket's left side falls outside the region.
-      needs_manual_hotspot: true
+        Drawn by hand around the bicycle from Gemini's bounding boxes, then checked by Claude: The
+        outline encloses the entire vine-covered bicycle, including its basket, handlebars, both wheels
+        and pedals, with only the small background areas that fall naturally within its convex outline.
+      verified_master_sha256: ac395ebf6d564fbfda5d8bf184be8684e36ec6e8064f9c28a9351fdb197b38cb
+      needs_manual_hotspot: false
+      bbox: [0.315, 0.574, 0.512, 0.923]
+      centroid: [0.407142, 0.741614]
+      area: 0.052696
     next: mountain-road-phonebox
     generation:
       provider: gemini
