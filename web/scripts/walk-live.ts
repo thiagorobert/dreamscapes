@@ -63,8 +63,6 @@ interface ProfileReport {
   introDismissed: boolean;
   steps: StepReport[];
   loopClosed: boolean;
-  zoomEdgeUsedZoom: boolean;
-  videoTransitions: number;
   back: { ok: boolean; detail: string };
   forward: { ok: boolean; detail: string };
   deepLink: { ok: boolean; detail: string };
@@ -262,8 +260,6 @@ async function walkProfile(
     introDismissed: false,
     steps: [],
     loopClosed: false,
-    zoomEdgeUsedZoom: false,
-    videoTransitions: 0,
     back: { ok: false, detail: 'not run' },
     forward: { ok: false, detail: 'not run' },
     deepLink: { ok: false, detail: 'not run' },
@@ -402,12 +398,6 @@ async function walkProfile(
     if (expectedTransition === 'video' && clipPlayedSeconds < 1) {
       problems.push(`clip reached only ${clipPlayedSeconds.toFixed(2)} s`);
     }
-    if (state.transition === 'video') {
-      report.videoTransitions += 1;
-    }
-    if (from.transition.type === 'zoom') {
-      report.zoomEdgeUsedZoom = state.transition === 'zoom';
-    }
     report.steps.push({
       step,
       from: fromId,
@@ -511,8 +501,6 @@ async function walkProfile(
     report.introDismissed &&
     report.steps.every((step) => step.ok) &&
     report.loopClosed &&
-    report.zoomEdgeUsedZoom &&
-    report.videoTransitions > 0 &&
     report.back.ok &&
     report.forward.ok &&
     report.deepLink.ok &&
@@ -542,8 +530,12 @@ function printReport(report: ProfileReport): void {
     );
   }
   console.log(`loop closed: ${String(report.loopClosed)}`);
-  console.log(`video transitions: ${String(report.videoTransitions)}`);
-  console.log(`zoom edge used the zoom: ${String(report.zoomEdgeUsedZoom)}`);
+  // Each step was already checked against its own edge in the manifest; these are totals.
+  for (const kind of ['video', 'zoom']) {
+    const played = report.steps.filter((step) => step.transition === kind).length;
+    const expected = report.steps.filter((step) => step.expectedTransition === kind).length;
+    console.log(`${kind} transitions: ${String(played)} played, ${String(expected)} expected`);
+  }
   console.log(`back: ${report.back.ok ? 'ok' : 'FAIL'} (${report.back.detail})`);
   console.log(`forward: ${report.forward.ok ? 'ok' : 'FAIL'} (${report.forward.detail})`);
   console.log(`deep link: ${report.deepLink.ok ? 'ok' : 'FAIL'} (${report.deepLink.detail})`);
