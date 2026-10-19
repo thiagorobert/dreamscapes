@@ -450,3 +450,97 @@ def test_a_dry_run_logs_nothing(placeholder_repo, monkeypatch):
     result = runner.invoke(app, ["hotspot", "--scene", "prison-yard", "--dry-run"])
     assert result.exit_code == 0, result.output
     assert not placeholder_repo.generation_log.exists()
+
+
+# --- a master that changed after verification ----------------------------------------------------
+
+
+def replace_master(paths, scene_id="prison-yard"):
+    """What `dsp select` does when it adopts another candidate: a new master file."""
+    Image.new("RGB", (2048, 1152), (120, 60, 30)).save(paths.master(scene_id))
+
+
+def bridge(paths, scene_id="prison-yard"):
+    return load_manifest(paths.scenes_yaml).scene(scene_id).bridge
+
+
+def test_a_verified_hotspot_records_its_master(placeholder_repo):
+    assert run(placeholder_repo)[0] == 0
+    master = sha256_file(placeholder_repo.master("prison-yard"))
+    assert bridge(placeholder_repo).verified_master_sha256 == master
+    assert f"verified_master_sha256: {master}" in placeholder_repo.scenes_yaml.read_text()
+
+
+def test_all_redoes_a_verified_scene_whose_master_changed(placeholder_repo):
+    assert run(placeholder_repo)[0] == 0
+    replace_master(placeholder_repo)
+    segmenter = FakeSegmenter([[hoop()]])
+    code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
+    assert code == 0, out
+    assert (
+        "prison-yard: its master has changed since the hotspot was verified, so it counts as "
+        "unverified" in out
+    )
+    assert "already verified" not in out
+    assert len(segmenter.calls) == 10
+    new_master = sha256_file(placeholder_repo.master("prison-yard"))
+    assert bridge(placeholder_repo).verified_master_sha256 == new_master
+
+    # Recorded again, so the next --all leaves it alone.
+    segmenter = FakeSegmenter([[hoop()]])
+    code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
+    assert "prison-yard: already verified, skipped" in out and "no master hash" not in out
+    assert len(segmenter.calls) == 0
+
+
+def test_naming_a_scene_whose_master_changed_says_so(placeholder_repo):
+    assert run(placeholder_repo)[0] == 0
+    replace_master(placeholder_repo)
+    code, out = run(placeholder_repo)
+    assert code == 0, out
+    assert "prison-yard: its master has changed since the hotspot was verified" in out
+
+
+def test_a_failed_rerun_drops_the_master_hash(placeholder_repo):
+    assert run(placeholder_repo)[0] == 0
+    code, _ = run(
+        placeholder_repo,
+        segmenter=FakeSegmenter([[court()]]),
+        verifier=FakeVerifier(REJECT_TWICE),
+    )
+    assert code == 1
+    after = bridge(placeholder_repo)
+    assert not after.verified and after.verified_master_sha256 is None
+
+
+def test_a_hotspot_verified_without_a_hash_is_trusted_and_says_so(placeholder_repo):
+    text = placeholder_repo.scenes_yaml.read_text()
+    patched = set_scene_fields(
+        text, "prison-yard", "bridge", {"verified": True}, BRIDGE_FIELD_ORDER
+    )
+    placeholder_repo.scenes_yaml.write_text(patched.text)
+    replace_master(placeholder_repo)  # cannot be noticed without a recorded hash
+    segmenter = FakeSegmenter([[hoop()]])
+    code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
+    assert code == 0, out
+    assert (
+        "prison-yard: already verified, skipped (use --force, or --scene prison-yard, to redo "
+        "it) (no master hash recorded to compare)" in out
+    )
+    assert len(segmenter.calls) == 9
+
+
+def test_a_hand_drawn_hotspot_on_a_changed_master_is_kept_with_a_warning(placeholder_repo):
+    assert run(placeholder_repo)[0] == 0
+    text = placeholder_repo.scenes_yaml.read_text()
+    patched = set_scene_fields(
+        text, "prison-yard", "bridge", {"source": "manual"}, BRIDGE_FIELD_ORDER
+    )
+    placeholder_repo.scenes_yaml.write_text(patched.text)
+    replace_master(placeholder_repo)
+    segmenter = FakeSegmenter([[hoop()]])
+    code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
+    assert code == 0, out
+    assert "prison-yard: kept its hand-drawn hotspot" in out
+    assert "warning: its master has changed since then; redraw it to match" in out
+    assert len(segmenter.calls) == 9

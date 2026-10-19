@@ -546,6 +546,8 @@ def test_first_attempt_verified(scene_image):
     updates = bridge_updates(result, "gemini")
     assert updates["verified"] is True and updates["needs_manual_hotspot"] is False
     assert updates["verification"] == "The hoop."
+    assert updates["verified_master_sha256"] is None  # no master hash was passed in
+    assert bridge_updates(result, "gemini", "ab" * 32)["verified_master_sha256"] == "ab" * 32
     assert updates["score"] is None  # Gemini reports no confidence: the field is removed
     assert updates["area"] == pytest.approx(geometry.area(updates["polygon"]), abs=1e-6)
     assert updates["centroid"] == pytest.approx(geometry.centroid(updates["polygon"]), abs=1e-6)
@@ -567,7 +569,8 @@ def test_retry_uses_the_box_claude_suggests(scene_image):
     assert geometry.point_in_polygon((0.5, 0.5), result.polygon)
 
 
-FLAG_ONLY = {"verified", "verification", "needs_manual_hotspot"}
+# A failed run only flags the scene; the master hash goes with the verification it belonged to.
+FLAG_ONLY = {"verified", "verification", "verified_master_sha256", "needs_manual_hotspot"}
 
 
 def test_a_no_without_a_new_box_goes_straight_to_manual_work(scene_image):
@@ -619,6 +622,7 @@ def test_nothing_found_keeps_the_existing_polygon(scene_image):
     assert bridge_updates(result, "gemini") == {
         "verified": False,
         "verification": result.verification_text(),
+        "verified_master_sha256": None,
         "needs_manual_hotspot": True,
     }
 

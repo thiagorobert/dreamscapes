@@ -1675,18 +1675,27 @@ def _indent(text: str, spaces: int) -> str:
 # --------------------------------------------------------------------------------------------
 
 
-def bridge_updates(result: HotspotResult, source: HotspotSource) -> dict[str, Any]:
+def bridge_updates(
+    result: HotspotResult, source: HotspotSource, master_sha256: str | None = None
+) -> dict[str, Any]:
     """The hotspot fields of ``bridge`` after a run; None removes a field.
 
-    Only a verified outline replaces the polygon and its derived fields. After a failure the
-    existing hotspot (perhaps verified earlier, perhaps drawn by hand) stays exactly as it was,
-    together with its ``source`` and mask; the scene is only flagged for manual work. The
+    Only a verified outline replaces the polygon and its derived fields, and it records
+    ``master_sha256``, the master it was verified against, so a later change of master shows.
+    After a failure the existing hotspot (perhaps verified earlier, perhaps drawn by hand) stays
+    exactly as it was, together with its ``source`` and mask; the scene is only flagged for
+    manual work, and the recorded master hash goes with the verification it belonged to. The
     rejected outlines are kept for review as assets/review/<scene>/hotspot-<n>[-<reading>].png.
     """
     final = result.final
     text = result.verification_text()
     if final is None or not final.polygon:
-        return {"verified": False, "verification": text, "needs_manual_hotspot": True}
+        return {
+            "verified": False,
+            "verification": text,
+            "verified_master_sha256": None,
+            "needs_manual_hotspot": True,
+        }
     polygon = [
         (round(float(x), POLYGON_DECIMALS), round(float(y), POLYGON_DECIMALS))
         for x, y in final.polygon
@@ -1699,12 +1708,26 @@ def bridge_updates(result: HotspotResult, source: HotspotSource) -> dict[str, An
         "source": source,
         "verified": True,
         "verification": text,
+        "verified_master_sha256": master_sha256,
         "score": round(float(score), 4) if score is not None else None,
         "needs_manual_hotspot": False,
         "bbox": [round(v, DERIVED_DECIMALS) for v in (x0, y0, x1, y1)],
         "centroid": [round(cx, DERIVED_DECIMALS), round(cy, DERIVED_DECIMALS)],
         "area": round(geometry.area(polygon), DERIVED_DECIMALS),
     }
+
+
+def master_changed(paths: RepoPaths, scene: Scene) -> bool | None:
+    """Whether the scene's master differs from the one its hotspot was verified against.
+
+    None when no hash was recorded (hotspots verified before hashes were kept, hand-drawn
+    ones): there is then nothing to compare. A missing master counts as changed.
+    """
+    recorded = scene.bridge.verified_master_sha256
+    if recorded is None:
+        return None
+    master = paths.master(scene.id)
+    return not master.exists() or sha256_file(master) != recorded
 
 
 def hotspot_issues(scene: Scene) -> list[Issue]:
@@ -1835,7 +1858,10 @@ def _process_scene(
     elif overlay.exists():
         overlay.unlink()  # never leave an overlay from an earlier run looking current
 
-    updates = bridge_updates(result, segmenter.source)
+    master = paths.master(sid)
+    updates = bridge_updates(
+        result, segmenter.source, sha256_file(master) if master.exists() else None
+    )
     record = {
         "scene": sid,
         "image": _rel(paths, image_path),
@@ -1932,15 +1958,27 @@ def run_hotspot_command(
             return 1
         if targets[0].bridge.source == "manual":
             echo(f"{scene}: replacing a hand-drawn hotspot because it was asked for by name")
+        elif master_changed(paths, targets[0]):
+            echo(f"{scene}: its master has changed since the hotspot was verified")
     else:
         targets = []
         for item in manifest.scenes:
+            changed = master_changed(paths, item)
             if item.bridge.source == "manual":
                 echo(f"{item.id}: kept its hand-drawn hotspot (use --scene {item.id} to redo it)")
+                if changed:
+                    echo("  warning: its master has changed since then; redraw it to match")
+            elif item.bridge.verified and changed:
+                echo(
+                    f"{item.id}: its master has changed since the hotspot was verified, so it "
+                    "counts as unverified"
+                )
+                targets.append(item)
             elif item.bridge.verified and not force:
+                unknown = "" if changed is False else " (no master hash recorded to compare)"
                 echo(
                     f"{item.id}: already verified, skipped (use --force, or --scene {item.id}, "
-                    "to redo it)"
+                    f"to redo it){unknown}"
                 )
             else:
                 targets.append(item)

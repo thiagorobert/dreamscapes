@@ -44,6 +44,8 @@ BBox = tuple[Unit, Unit, Unit, Unit]
 
 NonEmptyStr = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 
+Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
 HotspotSource = Literal["gemini", "sam3", "manual", "placeholder"]
 
 
@@ -80,6 +82,12 @@ class Bridge(_Strict):
     )
     verification: str | None = Field(
         default=None, description="Reason given by the verifier, kept for review."
+    )
+    verified_master_sha256: Sha256 | None = Field(
+        default=None,
+        description="SHA-256 of assets/masters/<id>.png when `dsp hotspot` verified the polygon. "
+        "If the master changes afterwards (for example `dsp select` adopts another candidate), "
+        "the polygon may no longer fit it, so `dsp hotspot --all` treats the scene as unverified.",
     )
     score: float | None = Field(default=None, description="Segmenter confidence, if reported.")
     needs_manual_hotspot: bool = Field(

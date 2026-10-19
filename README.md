@@ -113,7 +113,11 @@ part-way round, and those outlines are usually garbled).
 scene's committed mask. It sends nothing and leaves `content/scenes.yaml` and the masks alone,
 but still writes the review files under `assets/review/` (git-ignored). `--all` skips scenes
 that are already verified (add `--force` to redo them) and hand-drawn hotspots
-(`source: manual`); naming a scene with `--scene` always redoes it.
+(`source: manual`); naming a scene with `--scene` always redoes it. A verified hotspot records
+the SHA-256 of the master it was checked against (`verified_master_sha256`), and when the
+master has changed since (say `dsp select` adopted another candidate), `--all` treats the scene
+as unverified and redoes it. Run `dsp grade` before `dsp hotspot` after a new master, since the
+segmenter looks at the graded copy.
 `DSP_SEGMENTATION_PROVIDER=sam3` switches to SAM 3 on fal (needs
 `uv sync --extra sam3` and `FAL_KEY`). Each run prints its spend estimate first and refuses to
 go past `DSP_MAX_SPEND_USD` (default 15); a scene costs about $0.03, about $0.06 with the retry.
