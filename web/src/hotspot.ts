@@ -18,7 +18,7 @@ import type { BBox, Point } from './types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** Width in screen pixels of the invisible touch margin around the polygon. */
+/** How far outside the polygon, in screen pixels, a click or tap still counts as a hit. */
 export const TOUCH_MARGIN_PX = 10;
 
 /** Length of the shimmer sweep; matches the `hotspot-sweep` keyframes in styles.css. */
@@ -108,9 +108,10 @@ export class Hotspot {
       points,
       fill: 'transparent',
       stroke: 'transparent',
-      'stroke-width': String(TOUCH_MARGIN_PX),
+      // A stroke is centred on the outline, so it must be twice the margin wide.
+      'stroke-width': String(2 * TOUCH_MARGIN_PX),
       'stroke-linejoin': 'round',
-      // Keeps the stroke TOUCH_MARGIN_PX wide on screen despite the stretched unit viewBox.
+      // Measures the stroke in screen pixels despite the stretched unit viewBox.
       'vector-effect': 'non-scaling-stroke',
       'pointer-events': 'all',
     });

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { TOUCH_MARGIN_PX } from '../src/hotspot';
 import {
   CONTINUE_LABEL,
   INTRO_TEXT,
@@ -72,6 +73,21 @@ test.describe('walking the loop', () => {
       { x: centre.x, y: centre.y },
     );
     expect(cursor).toBe('pointer');
+  });
+
+  test('the touch margin reaches just outside the outline, and no farther', async ({ page }) => {
+    await open(page);
+    const polygon = (await currentScene(page)).bridge.polygon;
+    // The topmost vertex has nothing of the polygon above it, so "up" is straight outwards.
+    const top = polygon.reduce((best, point) => (point[1] < best[1] ? point : best));
+    const vertex = await screenPoint(page, top);
+    const hitsHotspot = (pixelsOut: number): Promise<boolean> =>
+      page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.classList.contains('hotspot-shape') ?? false,
+        { x: vertex.x, y: vertex.y - pixelsOut },
+      );
+    expect(await hitsHotspot(TOUCH_MARGIN_PX - 3)).toBe(true);
+    expect(await hitsHotspot(TOUCH_MARGIN_PX + 5)).toBe(false);
   });
 
   test('activating the object at its centroid moves to the next scene', async ({
@@ -212,6 +228,25 @@ test.describe('walking the loop', () => {
 
     await expect(page.locator('.ripple')).toHaveCount(0);
     await expect(page).toHaveURL(hashPattern(start.id));
+  });
+
+  test('a press released outside the window leaves no drag behind', async ({ page, viewport }) => {
+    await open(page);
+    const layer = page.locator('.scene-layer.is-current');
+    const before = (await layer.boundingBox())?.x;
+    const width = viewport?.width ?? 0;
+    const y = (viewport?.height ?? 0) / 2;
+    // Press, leave the window before the press turns into a pan, and let go out there: the page
+    // never sees the release.
+    await page.mouse.move(width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(-40, y);
+    await page.mouse.up();
+    // Coming back with the button up must not pan.
+    await page.mouse.move(width / 2 + 60, y, { steps: 3 });
+    await page.mouse.move(width / 2 + 160, y, { steps: 3 });
+    expect((await layer.boundingBox())?.x).toBe(before);
+    await expect(page.locator('.stage')).not.toHaveClass(/is-panning/);
   });
 
   test('a finger swipe pans the stage', async ({ page, hasTouch, viewport }) => {

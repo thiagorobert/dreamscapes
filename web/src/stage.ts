@@ -264,6 +264,12 @@ export class Stage {
     if (drag?.pointerId !== event.pointerId || !layer) {
       return;
     }
+    if ((event.buttons & 1) === 0) {
+      // The press ended where the page could not see it (released outside the window before a
+      // pan captured the pointer), so this is a hover, not a drag.
+      this.endDrag();
+      return;
+    }
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
     if (!drag.panning) {
