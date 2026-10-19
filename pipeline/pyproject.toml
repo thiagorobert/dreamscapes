@@ -11,6 +11,7 @@ dependencies = [
     "google-genai>=2.31.0",
     "httpx>=0.28.1",
     "numpy>=2.5.4",
+    "openai>=3.35.1",
     "opencv-python-headless>=5.0.0.93",
     "pillow>=13.0.0",
     "pydantic>=2",
