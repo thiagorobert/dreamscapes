@@ -7,7 +7,7 @@ from dreamscapes_pipeline.layout import MASTER_HEIGHT, MASTER_WIDTH
 from dreamscapes_pipeline.manifest import load_built_manifest, load_manifest, save_manifest
 from dreamscapes_pipeline.placeholders import PLACEHOLDERS_BY_ID, run_placeholders
 from dreamscapes_pipeline.validate import validate_repo
-from tests.conftest import file_hashes
+from tests.conftest import PLACEHOLDER_SCENE_COUNT, file_hashes
 from tests.fakes import offline, write_master  # noqa: F401
 
 
@@ -28,7 +28,7 @@ def test_export_reproduces_the_placeholder_output_byte_for_byte(placeholder_repo
 
     report = run_export(placeholder_repo)
     assert report.errors == [] and report.changed == [] and report.scenes_json == "unchanged"
-    assert len(report.scenes) == 10
+    assert len(report.scenes) == PLACEHOLDER_SCENE_COUNT
     assert file_hashes(placeholder_repo.root) == before
     built = load_built_manifest(placeholder_repo.scenes_json)
     assert built.scenes[0].title.startswith("Authored")

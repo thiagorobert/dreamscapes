@@ -5,25 +5,28 @@ import json
 from dreamscapes_pipeline import genlog
 from dreamscapes_pipeline.bakeoff import bakeoff_candidate, run_bakeoff
 from dreamscapes_pipeline.manifest import load_manifest
+from dreamscapes_pipeline.placeholders import PLACEHOLDER_SCENES
 from dreamscapes_pipeline.providers import FakeImageProvider
 from dreamscapes_pipeline.review import loop_order, run_review
 from dreamscapes_pipeline.select import ClaudeJudge, run_select
 from dreamscapes_pipeline.spend import SpendGuard
+from tests.conftest import PLACEHOLDER_SCENE_COUNT
 from tests.fakes import FakeAnthropicClient, offline, write_candidates, write_style  # noqa: F401
 
 
 def test_loop_order_follows_next_from_the_start(placeholder_repo):
     manifest = load_manifest(placeholder_repo.scenes_yaml)
     order = loop_order(manifest)
-    assert order[0] == "cliff-cottage" and order[-1] == "lighthouse-gallery"
-    assert len(order) == len(set(order)) == 10
+    # The placeholder table lists the scenes in loop order.
+    assert order[0] == manifest.start and order[-1] == PLACEHOLDER_SCENES[-1].id
+    assert len(order) == len(set(order)) == PLACEHOLDER_SCENE_COUNT
 
 
 def test_index_shows_every_master_side_by_side(placeholder_repo):
     report = run_review(placeholder_repo, load_manifest(placeholder_repo.scenes_yaml))
     html = report.index.read_text()
     assert report.contact_sheets == []
-    assert html.count("<figure>") == 10
+    assert html.count("<figure>") == PLACEHOLDER_SCENE_COUNT
     assert html.index("cliff-cottage") < html.index("prison-yard") < html.index("rooftop-court")
     assert "placeholder" in html
     assert (placeholder_repo.review / "thumbs" / "drowned-street.webp").exists()

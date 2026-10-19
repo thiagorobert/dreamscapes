@@ -28,6 +28,7 @@ from dreamscapes_pipeline.imaging import sha256_file
 from dreamscapes_pipeline.manifest import load_manifest
 from dreamscapes_pipeline.validate import validate_repo
 from dreamscapes_pipeline.yaml_patch import set_scene_fields
+from tests.conftest import PLACEHOLDER_SCENE_COUNT
 
 runner = CliRunner()
 
@@ -119,8 +120,9 @@ def test_dry_run_all_scenes(placeholder_repo, monkeypatch):
     monkeypatch.chdir(placeholder_repo.root)
     result = runner.invoke(app, ["hotspot", "--all", "--dry-run"])
     assert result.exit_code == 0, result.output
-    assert "done: 10 verified, 0 need a manual hotspot, 0 failed, 0 break the hotspot rules" in (
-        result.output
+    assert (
+        f"done: {PLACEHOLDER_SCENE_COUNT} verified, 0 need a manual hotspot, 0 failed, "
+        "0 break the hotspot rules" in result.output
     )
 
 
@@ -286,14 +288,15 @@ def test_all_skips_verified_scenes_unless_forced(placeholder_repo):
     code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
     assert code == 0, out
     assert "prison-yard: already verified, skipped" in out
-    assert len(segmenter.calls) == 9
-    assert "estimated spend: up to $0.00 for 9 scene(s)" in out
+    others = PLACEHOLDER_SCENE_COUNT - 1
+    assert len(segmenter.calls) == others
+    assert f"estimated spend: up to $0.00 for {others} scene(s)" in out
 
     segmenter = FakeSegmenter([[hoop()]])
     code, out = run(placeholder_repo, all_scenes=True, force=True, segmenter=segmenter)
     assert code == 0, out
     assert "already verified" not in out
-    assert len(segmenter.calls) == 10
+    assert len(segmenter.calls) == PLACEHOLDER_SCENE_COUNT
 
     segmenter = FakeSegmenter([[hoop()]])
     assert run(placeholder_repo, segmenter=segmenter)[0] == 0  # named: always redone
@@ -320,7 +323,7 @@ def test_all_keeps_hand_drawn_hotspots(placeholder_repo):
     code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
     assert code == 0, out
     assert "prison-yard: kept its hand-drawn hotspot" in out
-    assert len(segmenter.calls) == 9
+    assert len(segmenter.calls) == PLACEHOLDER_SCENE_COUNT - 1
     assert (
         load_manifest(placeholder_repo.scenes_yaml).scene("prison-yard").bridge.source == "manual"
     )
@@ -498,7 +501,7 @@ def test_all_redoes_a_verified_scene_whose_master_changed(placeholder_repo):
         "it counts as unverified" in out
     )
     assert "already verified" not in out
-    assert len(segmenter.calls) == 10
+    assert len(segmenter.calls) == PLACEHOLDER_SCENE_COUNT
     # The new outline was traced on the new graded copy, and that is what is recorded.
     assert placeholder_repo.graded("prison-yard") in [call[0] for call in segmenter.calls]
     redone = bridge(placeholder_repo)
@@ -548,7 +551,7 @@ def test_a_hotspot_verified_without_a_hash_is_trusted_and_says_so(placeholder_re
         "prison-yard: already verified, skipped (use --force, or --scene prison-yard, to redo "
         "it) (no master hash recorded to compare)" in out
     )
-    assert len(segmenter.calls) == 9
+    assert len(segmenter.calls) == PLACEHOLDER_SCENE_COUNT - 1
 
 
 def test_a_hand_drawn_hotspot_on_a_changed_master_is_kept_with_a_warning(placeholder_repo):
@@ -564,7 +567,7 @@ def test_a_hand_drawn_hotspot_on_a_changed_master_is_kept_with_a_warning(placeho
     assert code == 0, out
     assert "prison-yard: kept its hand-drawn hotspot" in out
     assert "warning: its master or graded copy has changed since then; redraw it to match" in out
-    assert len(segmenter.calls) == 9
+    assert len(segmenter.calls) == PLACEHOLDER_SCENE_COUNT - 1
 
 
 def test_a_graded_copy_older_than_its_master_is_refused(placeholder_repo):
@@ -606,7 +609,7 @@ def test_all_redoes_a_scene_whose_graded_copy_changed(placeholder_repo):
     code, out = run(placeholder_repo, all_scenes=True, segmenter=segmenter)
     assert code == 0, out
     assert "prison-yard: its master or graded copy has changed" in out
-    assert len(segmenter.calls) == 10
+    assert len(segmenter.calls) == PLACEHOLDER_SCENE_COUNT
 
 
 # --- an outline Claude accepts but the hotspot rules do not -------------------------------------

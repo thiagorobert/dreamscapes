@@ -8,7 +8,11 @@ from PIL import Image
 
 from dreamscapes_pipeline.layout import MASTER_HEIGHT, MASTER_WIDTH, RepoPaths
 from dreamscapes_pipeline.manifest import Bridge, Manifest, Scene, save_manifest
-from dreamscapes_pipeline.placeholders import run_placeholders
+from dreamscapes_pipeline.placeholders import PLACEHOLDER_SCENES, run_placeholders
+
+# The placeholder fixtures hold one scene per entry of PLACEHOLDER_SCENES. Tests take
+# their counts from here, so adding a scene to that table does not break them.
+PLACEHOLDER_SCENE_COUNT = len(PLACEHOLDER_SCENES)
 
 
 def square(cx: float, cy: float, half: float = 0.1) -> list[tuple[float, float]]:
