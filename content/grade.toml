@@ -1,0 +1,50 @@
+# The Dreamscapes colour grade: one deterministic pass applied by `dsp grade` to every selected
+# master, in the order of the tables below. Tuning a value here and re-running `dsp grade`
+# re-applies the look to every scene at once, so all ten images stay consistent.
+#
+# Units: values on a 0-255 scale are 8-bit levels; values on a 0-1 scale are fractions of full
+# intensity (luminance is Rec. 709). Sizes are fractions of the image width, so the grade looks
+# the same at any resolution.
+
+[desaturate]
+# Fraction of the original colour saturation that is kept. 1.0 leaves colour untouched and 0.0
+# is greyscale; 0.85 quietens the generator's colours without draining them.
+saturation = 0.85
+
+[tone]
+# Output level that pure black is raised to (0-255). Lifting blacks to 18 gives the hazy,
+# slightly faded shadows of the look; everything between black and white is remapped linearly.
+black_lift = 18
+# Input level (0-1) where the highlight shoulder begins. Above it, brightness rolls off smoothly
+# toward white instead of clipping, which keeps light sources soft and glowing.
+highlight_shoulder = 0.8
+
+[split_tone]
+# Colour the shadows are pushed toward (RGB, 0-255): a dusty teal.
+shadow_colour = [64, 128, 132]
+# Colour the highlights are pushed toward (RGB, 0-255): a warm amber.
+highlight_colour = [228, 170, 96]
+# How far shadows and highlights move toward those colours (0-1). Kept low so the tint reads as
+# atmosphere, not as a colour filter.
+strength = 0.12
+
+[bloom]
+# Luminance (0-1) above which pixels contribute to the glow; only lamps, windows and bright sky
+# bloom.
+threshold = 0.8
+# Blur radius of the glow as a fraction of the image width, used as the Gaussian standard
+# deviation (0.02 of a 2048-pixel master is about 41 pixels).
+radius = 0.02
+# Opacity (0-1) of the blurred glow when screen-blended back over the image.
+mix = 0.25
+
+[vignette]
+# How much the extreme corners are darkened (0-1), falling off smoothly to nothing toward the
+# centre so the eye settles in the middle of the frame, where the bridge object lives.
+strength = 0.15
+
+[grain]
+# Standard deviation of the Gaussian film grain on the 0-255 scale, added to luminance only so
+# it never introduces colour noise. The random generator is seeded from the scene id, so
+# re-grading a scene reproduces exactly the same grain.
+sigma = 2.5
