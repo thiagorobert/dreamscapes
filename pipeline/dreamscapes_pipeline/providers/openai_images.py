@@ -210,16 +210,26 @@ class OpenAIImageProvider:
         except Exception as error:
             raise _translate(error) from error
 
+        # Usage first: an answer without a usable image was still billed.
+        usage = _usage_dict(getattr(response, "usage", None))
+        cost = _cost_from_usage(usage)
         data = getattr(response, "data", None) or []
         if not data or not getattr(data[0], "b64_json", None):
-            raise ProviderError("openai returned no image", retryable=False)
-        usage = _usage_dict(getattr(response, "usage", None))
+            raise ProviderError("openai returned no image", retryable=False, cost_usd=cost)
+        try:
+            image = base64.b64decode(data[0].b64_json)
+        except ValueError as error:
+            raise ProviderError(
+                f"openai returned image data that is not valid base64: {error}",
+                retryable=False,
+                cost_usd=cost,
+            ) from error
         return GenerationResult(
-            image=base64.b64decode(data[0].b64_json),
+            image=image,
             mime_type="image/png",
             model=self.model,
             cost_estimate_usd=estimate,
-            cost_usd=_cost_from_usage(usage),
+            cost_usd=cost,
             request_id=getattr(response, "_request_id", None),
             response_id=None,
             revised_prompt=getattr(data[0], "revised_prompt", None),

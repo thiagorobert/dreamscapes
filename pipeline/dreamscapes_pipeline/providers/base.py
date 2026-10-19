@@ -79,7 +79,12 @@ class GenerationResult:
 
 
 class ProviderError(RuntimeError):
-    """A request failed. ``retryable`` is True for rate limits, timeouts and server errors."""
+    """A request failed. ``retryable`` is True for rate limits, timeouts and server errors.
+
+    ``cost_usd`` is set when the provider answered (and so billed) but the answer was unusable,
+    for example a blocked prompt that still reported token usage; the generation log and the
+    spend guard record it like any other paid call.
+    """
 
     def __init__(
         self,
@@ -88,11 +93,13 @@ class ProviderError(RuntimeError):
         retryable: bool = False,
         status_code: int | None = None,
         retry_after: float | None = None,
+        cost_usd: float | None = None,
     ):
         super().__init__(message)
         self.retryable = retryable
         self.status_code = status_code
         self.retry_after = retry_after
+        self.cost_usd = cost_usd
 
 
 class MissingCredentials(ProviderError):

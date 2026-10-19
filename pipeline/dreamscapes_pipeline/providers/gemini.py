@@ -46,6 +46,7 @@ from .base import (
     ProviderError,
     ReferenceImage,
     is_retryable_status,
+    retry_after_seconds,
 )
 
 DEFAULT_MODEL = "gemini-nano-banana-2.1"
@@ -201,6 +202,9 @@ class GeminiImageProvider:
         except Exception as error:
             raise _translate(error) from error
 
+        # Usage first: a blocked prompt or an empty answer still reports (and bills) tokens.
+        usage = _usage_dict(getattr(interaction, "usage", None))
+        cost = _cost_from_usage(self.model, usage)
         status = getattr(interaction, "status", None)
         image = getattr(interaction, "output_image", None)
         text = getattr(interaction, "output_text", None)
@@ -208,17 +212,25 @@ class GeminiImageProvider:
             detail = f"status {status}" if status else "no image in the response"
             if text:
                 detail += f"; model said: {text.strip()[:300]}"
-            raise ProviderError(f"gemini returned no image ({detail})", retryable=False)
+            raise ProviderError(
+                f"gemini returned no image ({detail})", retryable=False, cost_usd=cost
+            )
 
         data = image.data
-        raw = base64.b64decode(data) if isinstance(data, str) else bytes(data)
-        usage = _usage_dict(getattr(interaction, "usage", None))
+        try:
+            raw = base64.b64decode(data) if isinstance(data, str) else bytes(data)
+        except ValueError as error:
+            raise ProviderError(
+                f"gemini returned image data that is not valid base64: {error}",
+                retryable=False,
+                cost_usd=cost,
+            ) from error
         return GenerationResult(
             image=raw,
             mime_type=getattr(image, "mime_type", None) or "image/png",
             model=str(getattr(interaction, "model", None) or self.model),
             cost_estimate_usd=estimate,
-            cost_usd=_cost_from_usage(self.model, usage),
+            cost_usd=cost,
             request_id=None,
             response_id=getattr(interaction, "id", None) or None,
             revised_prompt=None,
@@ -236,10 +248,12 @@ def _translate(error: Exception) -> ProviderError:
     if not isinstance(code, int):
         code = getattr(error, "status_code", None)
     if isinstance(code, int):
+        response = getattr(error, "response", None)
         return ProviderError(
             f"gemini request failed with HTTP {code}: {error}",
             retryable=is_retryable_status(code),
             status_code=code,
+            retry_after=retry_after_seconds(getattr(response, "headers", None)),
         )
     try:
         import httpx

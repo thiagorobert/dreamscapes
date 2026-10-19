@@ -138,6 +138,23 @@ def test_gemini_without_an_image_is_not_retryable():
     with pytest.raises(ProviderError, match="can't draw that") as caught:
         provider.generate("p", "16:9", "2K", [], None)
     assert not caught.value.retryable
+    # The blocked answer still reported usage, so the error carries what the call cost.
+    assert caught.value.cost_usd == pytest.approx((1000 * 1.5 + 1680 * 30 + 400 * 7.5) / 1e6)
+
+
+def test_gemini_retry_after_comes_from_the_response_headers():
+    import httpx
+
+    request = httpx.Request("POST", "https://generativelanguage.example.invalid/v1/interactions")
+    response = httpx.Response(429, headers={"retry-after": "7"}, request=request)
+
+    def limited(body):
+        raise genai_errors.ClientError(429, {"error": {"message": "slow down"}}, response)
+
+    provider = GeminiImageProvider(client=FakeGenaiClient(limited))
+    with pytest.raises(ProviderError) as caught:
+        provider.generate("p", "16:9", "2K", [], None)
+    assert caught.value.retryable and caught.value.retry_after == 7.0
 
 
 @pytest.mark.parametrize(("code", "retryable"), [(429, True), (503, True), (400, False)])
@@ -253,6 +270,20 @@ def test_openai_errors_are_classified(error, retryable, retry_after):
         provider.generate("p", "16:9", "2K", [], None)
     assert caught.value.retryable is retryable
     assert caught.value.retry_after == retry_after
+
+
+def test_openai_answer_without_an_image_still_reports_its_cost():
+    class Empty(FakeOpenAIClient):
+        def _response(self):
+            response = super()._response()
+            response.data = []
+            return response
+
+    provider = OpenAIImageProvider(client=Empty())
+    with pytest.raises(ProviderError, match="no image") as caught:
+        provider.generate("p", "16:9", "2K", [], None)
+    assert not caught.value.retryable
+    assert caught.value.cost_usd == pytest.approx((4000 * 30 + 500 * 8 + 200 * 5) / 1e6)
 
 
 def test_openai_needs_a_key():
