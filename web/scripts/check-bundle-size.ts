@@ -5,10 +5,12 @@
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 const BUDGET_BYTES = 30 * 1024;
-const assets = new URL('../dist/assets/', import.meta.url).pathname;
+// fileURLToPath, not URL.pathname, so paths with spaces or on Windows come out right.
+const assets = fileURLToPath(new URL('../dist/assets/', import.meta.url));
 
 function gzippedSize(path: string): number {
   return gzipSync(readFileSync(path), { level: 9 }).length;

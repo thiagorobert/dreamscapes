@@ -17,6 +17,8 @@ export class Accessibility {
   readonly button: HTMLButtonElement;
   private readonly live: HTMLParagraphElement;
   private busy = false;
+  private pendingTitle = '';
+  private frame: number | undefined;
 
   constructor(parent: HTMLElement, onContinue: () => void) {
     this.button = document.createElement('button');
@@ -38,9 +40,17 @@ export class Accessibility {
     parent.append(this.button, this.live);
   }
 
-  /** Announces the scene now on screen. */
+  /**
+   * Announces the scene now on screen. The text lands a frame later: screen readers skip
+   * changes to a live region made in the same frame it was added to the page, which is what
+   * happens to the first scene's title. Rapid calls collapse into the latest title.
+   */
   announce(scene: Scene): void {
-    this.live.textContent = scene.title;
+    this.pendingTitle = scene.title;
+    this.frame ??= requestAnimationFrame(() => {
+      this.frame = undefined;
+      this.live.textContent = this.pendingTitle;
+    });
   }
 
   setBusy(busy: boolean): void {
