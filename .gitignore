@@ -1,0 +1,23 @@
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Node / web
+node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+
+# Pipeline working files that stay local
+assets/candidates/
+assets/review/
+
+# OS noise
+.DS_Store
