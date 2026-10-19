@@ -25,7 +25,7 @@ from dreamscapes_pipeline.layout import MASTER_HEIGHT, MASTER_WIDTH, RepoPaths
 from dreamscapes_pipeline.manifest import load_built_manifest, load_manifest
 from dreamscapes_pipeline.providers.base import ProviderError
 from dreamscapes_pipeline.providers.veo import VeoProvider
-from dreamscapes_pipeline.spend import SpendGuard
+from dreamscapes_pipeline.spend import SpendGuard, SpendLimitExceeded
 from tests.conftest import file_hashes, write_small_repo
 from tests.fakes import offline, write_style  # noqa: F401
 
@@ -60,11 +60,13 @@ class FakeVeoClient:
         polls_needed: int = 2,
         start_failures: list[Exception] | None = None,
         blocked: bool = False,
+        download_failures: int = 0,
     ):
         self.video = video
         self.polls_needed = polls_needed
         self.start_failures = list(start_failures or [])
         self.blocked = blocked
+        self.download_failures = download_failures
         self.starts: list[dict[str, Any]] = []
         self.polls = 0
         self.downloads = 0
@@ -95,6 +97,9 @@ class FakeVeoClient:
 
     def _download(self, *, file: Any) -> bytes:
         self.downloads += 1
+        if self.download_failures:
+            self.download_failures -= 1
+            raise HttpError(503)
         return self.video
 
 
@@ -489,13 +494,20 @@ def test_a_removed_clip_is_rendered_again_not_quietly_restored(repo):
     data["scenes"][0]["transition"] = {"type": "zoom"}
     repo.scenes_yaml.write_text(yaml.safe_dump(data, sort_keys=False))
 
+    # --all leaves the rejected edge alone, without paying for anything.
     client = FakeVeoClient(video=b"another take")
-    code, _ = run(repo, client, FakeRunner())
+    all_edges = morph.pick_edges(load_manifest(repo.scenes_yaml), None, True)
+    code, lines = run(repo, client, FakeRunner(), edges=all_edges, dry_run=True)
+    assert any("keeps the zoom, left alone" in line for line in lines)
+    assert not any("edge 1 of" in line and "first-scene -> second-scene" in line for line in lines)
+
+    # Named with --edge, it is rendered again (a new paid call, never the old download).
+    code, _ = run(repo, client, FakeRunner(), named=True)
     assert code == 0 and len(client.starts) == 1
 
 
 def test_reencode_uses_the_saved_download(repo):
-    code, lines = run(repo, FakeVeoClient(), FakeRunner(), reencode=True)
+    code, lines = run(repo, FakeVeoClient(), FakeRunner(), reencode=True, named=True)
     assert code == 1
     assert any("no saved Veo download to re-encode" in line for line in lines)
 
@@ -507,6 +519,151 @@ def test_reencode_uses_the_saved_download(repo):
     assert morph_rows(repo)[-1]["purpose"] == "reencode"
     (clip,) = morph.edge_clips(repo, *EDGE)
     assert clip.stat().st_size == 1_000_000
+
+
+def reject_edge(paths: RepoPaths) -> None:
+    """What a person does to reject a clip: zoom in the manifest, clip deleted."""
+    for clip in morph.edge_clips(paths, *EDGE):
+        clip.unlink()
+    data = yaml.safe_load(paths.scenes_yaml.read_text())
+    data["scenes"][0]["transition"] = {"type": "zoom"}
+    paths.scenes_yaml.write_text(yaml.safe_dump(data, sort_keys=False))
+
+
+def test_reencode_all_leaves_a_rejected_edge_alone_unless_named(repo):
+    run(repo, FakeVeoClient(), FakeRunner())
+    reject_edge(repo)
+    all_edges = morph.pick_edges(load_manifest(repo.scenes_yaml), None, True)
+
+    code, lines = run(repo, FakeVeoClient(), FakeRunner(), edges=all_edges, reencode=True)
+    out = "\n".join(lines)
+    assert code == 0
+    assert "keeps the zoom, left alone" in out and "first-scene -> second-scene" in out
+    assert load_manifest(repo.scenes_yaml).scene("first-scene").transition.type == "zoom"
+    assert morph.edge_clips(repo, *EDGE) == []
+
+    code, lines = run(repo, FakeVeoClient(), FakeRunner(), reencode=True, dry_run=True)
+    assert any("keeps the zoom, left alone" in line for line in lines)
+
+    # Named explicitly, the saved download is brought back on purpose.
+    code, lines = run(repo, FakeVeoClient(), FakeRunner(), reencode=True, named=True)
+    assert code == 0, lines
+    assert load_manifest(repo.scenes_yaml).scene("first-scene").transition.type == "video"
+
+
+def test_a_clip_made_from_older_masters_is_rendered_again(repo):
+    run(repo, FakeVeoClient(), FakeRunner())
+    Image.new("RGB", (MASTER_WIDTH, MASTER_HEIGHT), (10, 200, 10)).save(repo.graded("second-scene"))
+
+    client = FakeVeoClient()
+    code, lines = run(repo, client, FakeRunner(), dry_run=True)
+    assert any(
+        "assets/masters/second-scene.graded.png changed since the clip in place" in line
+        and "planning a new render" in line
+        for line in lines
+    )
+    assert any("edge 1 of 1: first-scene -> second-scene (Veo request" in line for line in lines)
+
+    code, lines = run(repo, client, FakeRunner(), keep_stale=True)
+    assert code == 0 and client.starts == []
+    assert any("kept because of --keep-stale" in line for line in lines)
+
+    code, lines = run(repo, client, FakeRunner())
+    assert code == 0 and len(client.starts) == 1
+    assert client.starts[0]["config"].last_frame.image_bytes == (
+        repo.graded("second-scene").read_bytes()
+    )
+    # The new clip matches the current masters, so the next run leaves it alone.
+    code, lines = run(repo, client, FakeRunner())
+    assert len(client.starts) == 1 and any("skipped" in line for line in lines)
+
+
+def test_a_reencoded_clip_traces_back_to_its_paid_call(repo):
+    run(repo, FakeVeoClient(), FakeRunner())
+    run(repo, FakeVeoClient(), FakeRunner(sizes={None: 1_200_000, 720: 1}), reencode=True)
+    rows = genlog.read_rows(repo.generation_log)
+    (clip,) = morph.edge_clips(repo, *EDGE)
+    source = morph.clip_source_row(rows, clip)
+    assert source is not None and source["purpose"] == "morph"
+    assert morph.changed_masters(rows, repo, *EDGE, clip) == []
+
+
+def test_a_failed_download_is_charged_and_kept_retrievable(repo):
+    client = FakeVeoClient(download_failures=10)
+    code, lines = run(repo, client, FakeRunner())
+    assert code == 1
+    (row,) = morph_rows(repo)
+    assert row["status"] == "error" and row["billing"] == "charged"
+    assert row["cost_usd"] == pytest.approx(0.96)
+    assert row["response_id"] == "operations/1" and row["retrievable_until"]
+    assert genlog.total_spend(genlog.read_rows(repo.generation_log)) == pytest.approx(0.96)
+    assert any("spent about $0.96" in line for line in lines)
+
+
+def test_a_start_failure_costs_nothing(repo):
+    client = FakeVeoClient(start_failures=[HttpError(400)])
+    code, _ = run(repo, client, FakeRunner())
+    assert code == 1
+    (row,) = morph_rows(repo)
+    assert row["billing"] == "none" and row["cost_usd"] is None
+    assert genlog.total_spend(genlog.read_rows(repo.generation_log)) == 0.0
+
+
+class StopOnSecondCall(SpendGuard):
+    def before_call(self, estimate: float, what: str) -> None:
+        if self.calls:
+            raise SpendLimitExceeded(f"stopping before {what}: test limit")
+        super().before_call(estimate, what)
+
+
+@pytest.mark.parametrize("stop", ["spend limit", "missing key"])
+def test_scenes_json_is_exported_even_when_the_run_stops_early(repo, stop):
+    all_edges = morph.pick_edges(load_manifest(repo.scenes_yaml), None, True)
+    lines: list[str] = []
+    if stop == "spend limit":
+        veo, guard = VeoProvider(client=FakeVeoClient(), root=repo.root), StopOnSecondCall(15)
+    else:
+        # The first edge finishes a saved download for free; the second needs Veo and no
+        # GEMINI_API_KEY is set, so the run stops there.
+        run(repo, FakeVeoClient(), FakeRunner(fail_encodes=1))
+        veo, guard = VeoProvider(root=repo.root), SpendGuard(limit=15)
+    code = morph.run_morph(
+        repo,
+        load_manifest(repo.scenes_yaml),
+        all_edges,
+        veo,
+        guard=guard,
+        runner=FakeRunner(),
+        echo=lines.append,
+        sleep=lambda _s: None,
+    )
+    assert code == 1
+    assert any(line.startswith("stopped early:") for line in lines)
+    built = {s.id: s for s in load_built_manifest(repo.scenes_json).scenes}
+    assert built["first-scene"].transition.type == "video"
+    assert built["second-scene"].transition.type == "zoom"
+    assert (morph.review_root(repo) / "index.html").exists()
+
+
+def test_encodes_are_written_outside_the_public_folder(repo):
+    runner = FakeRunner()
+    run(repo, FakeVeoClient(), runner)
+    (encode,) = runner.encodes
+    target = Path(encode[-1])
+    assert target.parent == morph.encode_dir(repo)
+    assert not target.is_relative_to(repo.web_public)
+    assert sorted(p.name for p in repo.morphs.iterdir()) == [
+        p.name for p in morph.edge_clips(repo, *EDGE)
+    ]
+
+
+def test_the_review_index_survives_a_deleted_clip(repo):
+    run(repo, FakeVeoClient(), FakeRunner())
+    reject_edge(repo)
+    index = morph.write_review_index(repo, load_manifest(repo.scenes_yaml))
+    text = index.read_text()
+    assert "not in the manifest (zoom)" in text
+    assert "no longer in web/public/morphs" in text and "<video" not in text
 
 
 def test_placeholder_masters_are_refused(placeholder_repo):
@@ -553,6 +710,13 @@ def test_operation_timeout_is_reported(repo):
     assert code == 1
     (row,) = morph_rows(repo)
     assert row["status"] == "error" and "still rendering" in row["error"]
+    # Veo may still finish and bill the clip: counted, flagged, and fetchable by name.
+    assert row["billing"] == "unknown" and row["cost_usd"] == pytest.approx(0.96)
+    assert row["response_id"] == "operations/1"
+    assert "operations/1" in row["error"] and row["retrievable_until"]
+    assert genlog.total_spend(genlog.read_rows(repo.generation_log)) == pytest.approx(0.96)
+    assert any("can still be fetched until" in line for line in lines)
+    assert any("spent about $0.96" in line for line in lines)
 
 
 def test_veo_operation_errors_are_not_retried():

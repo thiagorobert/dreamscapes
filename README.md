@@ -79,7 +79,7 @@ uv run dsp --help
 | `dsp hotspot --scene <id> \| --all [--force] [--box x0 y0 x1 y1] [--dry-run]` | Segments the bridge object into a hotspot polygon, has Claude verify it, and writes it to `content/scenes.yaml`. `--dry-run` needs no keys. | yes |
 | `dsp export [--check]` | Writes the AVIF/WebP variants, blurred previews and `web/public/scenes.json` from the graded masters, then verifies every file against its hash; `--check` only reports what would change. | no |
 | `dsp review` | Rebuilds every contact sheet and `assets/review/index.html`, which shows all graded masters side by side. | no |
-| `dsp morph --edge <a> <b> \| --all [--force] [--reencode] [--resolution 1080p] [--duration 8] [--model id] [--dry-run]` | Renders a Veo clip from scene A's graded master to scene B's (B must be A's `next`), strips the audio and re-encodes it with ffmpeg to `web/public/morphs/<a>__<b>.<hash>.mp4`, points A's transition at it and re-exports `scenes.json`. Skips edges whose clip is in place unless `--force`; `--reencode` rebuilds clips from the saved downloads without a new call. | yes |
+| `dsp morph --edge <a> <b> \| --all [--force] [--reencode] [--keep-stale] [--resolution 1080p] [--duration 8] [--model id] [--dry-run]` | Renders a Veo clip from scene A's graded master to scene B's (B must be A's `next`), strips the audio and re-encodes it with ffmpeg to `web/public/morphs/<a>__<b>.<hash>.mp4`, points A's transition at it and re-exports `scenes.json`. Skips edges whose clip is in place unless `--force`, or unless their graded masters changed since (then it renders again; `--keep-stale` keeps the old clip). `--reencode` rebuilds clips from the saved downloads without a new call. | yes |
 | `dsp bakeoff [--candidates 4] [--force] [--quality high] [--dry-run]` | Generates the first scene with Gemini and OpenAI, grades every image, has Claude score them blind and writes `assets/review/bakeoff.html`. | yes |
 
 Commands that call a paid API print their estimated spend first and refuse to go past
@@ -126,8 +126,14 @@ mood. `assets/review/morphs/index.html` shows, per edge, the two masters with th
 middle and last frames between them, a contact sheet of eight frames, the clip itself, and how
 far the first and last frames are from the masters (mean absolute difference, 0-255). To reject
 a clip, set that scene's `transition` back to `type: zoom`, delete the clip and run
-`uv run dsp export`; `--all` will not quietly bring it back, but asking for that edge again
-renders a new one. The site falls back to the zoom whenever a clip fails or is slow to load.
+`uv run dsp export`. From then on `--all` leaves that edge alone: it neither re-encodes the
+saved download nor pays for a new render. Naming the edge with `--edge <a> <b>` renders a new
+one. The site falls back to the zoom whenever a clip fails or is slow to load.
+
+A call that fails after Veo accepted it is still counted in the generation log and against
+the spend limit: a video that finished is billed even if its download failed, and one still
+rendering when the command gave up may finish and be billed later. Those rows carry the
+operation name and `retrievable_until`, the moment Google deletes the video (two days on).
 
 Checks: `uv run pytest -q`, `uv run ruff check .`, `uv run ruff format --check .`
 (`uv run ruff format .` to fix).

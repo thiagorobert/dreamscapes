@@ -433,7 +433,16 @@ def morph(
         typer.Option(
             "--reencode",
             help="Rebuild clips from the saved Veo downloads in assets/candidates/morphs with "
-            "the current encoding settings; makes no paid call.",
+            "the current encoding settings; makes no paid call. With --all only edges that "
+            "already play a clip; an edge that keeps the zoom must be named with --edge.",
+        ),
+    ] = False,
+    keep_stale: Annotated[
+        bool,
+        typer.Option(
+            "--keep-stale",
+            help="Keep a clip in place even when the graded masters changed since it was "
+            "rendered (by default such a clip is rendered again).",
         ),
     ] = False,
     dry_run: DryRunOpt = False,
@@ -470,6 +479,8 @@ def morph(
         duration=duration,
         force=force,
         reencode=reencode,
+        named=edge is not None,
+        keep_stale=keep_stale,
         dry_run=dry_run,
         guard=guard,
         echo=typer.echo,

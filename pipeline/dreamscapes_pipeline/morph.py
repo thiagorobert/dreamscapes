@@ -48,6 +48,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,8 @@ POLL_INTERVAL_S = 10.0
 OPERATION_TIMEOUT_S = 15 * 60.0
 """The docs quote up to 6 minutes at peak; this leaves plenty of room before giving up."""
 PROGRESS_EVERY_POLLS = 6
+VIDEO_RETENTION_DAYS = 2
+"""Google deletes generated videos two days after they are made."""
 
 METRIC_SIZE = (256, 144)
 STRIP_FRAMES = 8
@@ -136,6 +139,11 @@ def raw_dir(paths: RepoPaths) -> Path:
 def raw_path(paths: RepoPaths, a: str, b: str) -> Path:
     """The Veo download as received, audio included (git-ignored)."""
     return raw_dir(paths) / f"{edge_stem(a, b)}.veo.mp4"
+
+
+def encode_dir(paths: RepoPaths) -> Path:
+    """Where encodes are written before they move into ``web/public/morphs`` (git-ignored)."""
+    return raw_dir(paths) / "tmp"
 
 
 def review_root(paths: RepoPaths) -> Path:
@@ -312,7 +320,9 @@ def encode_clip(
     """
     source = probe(runner, raw)
     paths.morphs.mkdir(parents=True, exist_ok=True)
-    temporary = paths.morphs / f".{edge_stem(a, b)}.encoding.mp4"
+    # Encode outside web/public so a half-written file can never be served, built or committed.
+    encode_dir(paths).mkdir(parents=True, exist_ok=True)
+    temporary = encode_dir(paths) / f"{edge_stem(a, b)}.encoding.mp4"
     tried: list[str] = []
     seen: set[tuple[int | None, int]] = set()
     try:
@@ -499,6 +509,11 @@ def write_review_index(paths: RepoPaths, manifest: Manifest) -> Path:
             for label, p in cells
         )
         clip = paths.public_file(data["clip"])
+        player = (
+            f'<video src="{url(here, clip)}" controls muted playsinline preload="none"></video>'
+            if clip.exists()
+            else '<p class="muted">the clip file is no longer in web/public/morphs</p>'
+        )
         rows.append(
             f"<h2>{esc(a)} &rarr; {esc(b)}</h2>\n"
             f"<p>{status} <code>{esc(data['clip'])}</code> &middot; {data['duration']} s &middot; "
@@ -511,8 +526,7 @@ def write_review_index(paths: RepoPaths, manifest: Manifest) -> Path:
             f'<div class="strip">{figures}</div>\n'
             f'<p class="muted">the whole clip, eight frames evenly spaced:</p>'
             f'<img class="contact" loading="lazy" src="{url(here, folder / "strip.jpg")}" '
-            'alt="contact sheet of the clip">\n'
-            f'<video src="{url(here, clip)}" controls muted playsinline preload="none"></video>'
+            'alt="contact sheet of the clip">\n' + player
         )
     body = (
         "<h1>Morph clips</h1>\n<p class=muted>Each row: the outgoing master, the clip's first, "
@@ -595,6 +609,9 @@ class PlannedEdge:
 class MorphPlan:
     items: list[PlannedEdge] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    held: list[str] = field(default_factory=list)
+    """Edges that keep the zoom, left alone by --reencode unless named with --edge."""
+    warnings: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -696,6 +713,53 @@ def source_row_for_raw(
     return None
 
 
+def clip_source_row(rows: list[dict[str, Any]], clip: Path) -> dict[str, Any] | None:
+    """The paid call that produced the clip file ``clip``, found by the file's hash. A clip
+    rebuilt with ``--reencode`` leads back to the call that made its download."""
+    digest = sha256_bytes(clip.read_bytes())
+    by_id = {row.get("id"): row for row in rows}
+    for row in reversed(rows):
+        if (
+            row.get("kind") == "morph"
+            and row.get("status") == "ok"
+            and row.get("output_sha256") == digest
+        ):
+            if row.get("purpose") == "reencode":
+                return by_id.get(row.get("source_row"))
+            return row
+    return None
+
+
+def changed_masters(
+    rows: list[dict[str, Any]], paths: RepoPaths, a: str, b: str, clip: Path
+) -> list[str] | None:
+    """Graded masters of the edge that differ from the frames the clip in place was rendered
+    from (an empty list when none do), or None when the log does not say how it was made."""
+    source = clip_source_row(rows, clip)
+    if source is None:
+        return None
+    recorded = {ref.get("role"): ref.get("sha256") for ref in source.get("references") or []}
+    changed = []
+    for role, scene_id in (("first_frame", a), ("last_frame", b)):
+        graded = paths.graded(scene_id)
+        if graded.exists() and recorded.get(role) != sha256_bytes(graded.read_bytes()):
+            changed.append(_rel(paths, graded))
+    return changed
+
+
+def was_rejected(rows: list[dict[str, Any]], a: str, b: str) -> bool:
+    """True when a clip was finished for this edge before; if the edge now keeps the zoom,
+    someone took that clip out on purpose."""
+    return any(
+        row.get("kind") == "morph"
+        and row.get("status") == "ok"
+        and row.get("scene") == a
+        and row.get("next_scene") == b
+        and row.get("output_path")
+        for row in rows
+    )
+
+
 def plan_morphs(
     paths: RepoPaths,
     manifest: Manifest,
@@ -707,35 +771,68 @@ def plan_morphs(
     duration: int,
     force: bool = False,
     reencode: bool = False,
+    named: bool = False,
+    keep_stale: bool = False,
     dry_run: bool = False,
     rows: list[dict[str, Any]] | None = None,
 ) -> MorphPlan:
+    """Decide, edge by edge, what a run does.
+
+    ``named`` is True when the edges were named on the command line (``--edge``) rather than
+    taken from the whole loop (``--all``). A rejected edge (one that keeps the zoom although a
+    clip was finished for it before) is only worked on when named: ``--all`` neither re-encodes
+    its saved download nor pays for a new render, so a rejection stays a rejection.
+    """
     plan = MorphPlan()
     rows = rows if rows is not None else genlog.read_rows(paths.generation_log)
     by_id = manifest.by_id()
     veo.check(resolution, duration)
     for a, b in edges:
         origin, destination = by_id[a], by_id[b]
+        what = f"{a} -> {b}"
+        source: dict[str, Any] | None = None
+        keeps_zoom = origin.transition.type != "video"
+        if keeps_zoom and not named and (reencode or was_rejected(rows, a, b)):
+            plan.held.append(what)
+            continue
         if reencode:
             source = source_row_for_raw(rows, paths, a, b)
             if source is None:
                 plan.problems.append(
-                    f"{a} -> {b}: no saved Veo download to re-encode "
+                    f"{what}: no saved Veo download to re-encode "
                     f"({_rel(paths, raw_path(paths, a, b))} is missing or not in the log)"
                 )
                 continue
-        elif not force and clip_in_place(paths, origin) is not None:
-            plan.skipped.append(f"{a} -> {b}")
-            continue
+        elif not force:
+            clip = clip_in_place(paths, origin)
+            if clip is not None:
+                changed = changed_masters(rows, paths, a, b, clip)
+                if changed is None:
+                    plan.notes.append(
+                        f"{what}: the log does not say which masters the clip in place was "
+                        "made from, so it cannot tell whether the clip is stale"
+                    )
+                if not changed or keep_stale:
+                    if changed:
+                        plan.warnings.append(
+                            f"{what}: {', '.join(changed)} changed since the clip in place was "
+                            "rendered; kept because of --keep-stale"
+                        )
+                    plan.skipped.append(what)
+                    continue
+                plan.warnings.append(
+                    f"{what}: {', '.join(changed)} changed since the clip in place was "
+                    "rendered; planning a new render (pass --keep-stale to keep the old clip)"
+                )
         missing = [
             _rel(paths, paths.graded(sid)) for sid in (a, b) if not paths.graded(sid).exists()
         ]
         if missing:
-            plan.problems.append(f"{a} -> {b}: {', '.join(missing)} missing; run `dsp grade`")
+            plan.problems.append(f"{what}: {', '.join(missing)} missing; run `dsp grade`")
             continue
         placeholders = [sid for sid in (a, b) if is_placeholder_image(paths.master(sid))]
         if placeholders and not reencode:
-            problem = f"{a} -> {b}: {', '.join(placeholders)} still has a placeholder master"
+            problem = f"{what}: {', '.join(placeholders)} still has a placeholder master"
             (plan.notes if dry_run else plan.problems).append(problem)
             if not dry_run:
                 continue
@@ -759,7 +856,7 @@ def plan_morphs(
             if resumable is not None:
                 item.mode, item.estimate, item.source_row = "reencode", 0.0, resumable
                 plan.notes.append(
-                    f"{a} -> {b}: finishing the saved Veo download from log row "
+                    f"{what}: finishing the saved Veo download from log row "
                     f"{resumable.get('id')} (no new call)"
                 )
         plan.items.append(item)
@@ -777,6 +874,8 @@ class MorphOutcome:
     failed: list[str] = field(default_factory=list)
     spent: float = 0.0
     manifest_changed: bool = False
+    stopped: str | None = None
+    """Why the run ended before its last edge (spend limit, missing key), if it did."""
 
 
 def wait_for_operation(
@@ -851,6 +950,208 @@ def _report(review: EdgeReview, echo: Echo) -> None:
         echo(f"  warning: {warning}; look at the frames before keeping this clip")
 
 
+def _retrievable_until() -> str:
+    """When Google deletes a video generated now (it keeps them for two days)."""
+    deadline = datetime.now(UTC) + timedelta(days=VIDEO_RETENTION_DAYS)
+    return deadline.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def failed_call_billing(
+    stage: str, error: ProviderError, estimate: float
+) -> tuple[float | None, str]:
+    """What a failed Veo call cost, and how sure that is, from how far it got.
+
+    * ``start``: the job was never accepted, so nothing was made or billed.
+    * ``render``: polling gave up (timeout or repeated errors) while the job was still running.
+      It may well finish and be billed, so the estimate is charged, marked ``unknown``.
+    * ``done``: Veo finished. A video it made is billed even if the download then fails; a
+      blocked video is documented as free and says so through ``error.cost_usd``.
+    """
+    if stage == "start":
+        return error.cost_usd, "none"
+    if stage == "render":
+        return estimate, "unknown"
+    if error.cost_usd is not None:
+        return error.cost_usd, "charged" if error.cost_usd else "not charged"
+    return estimate, "charged"
+
+
+def _reencode_edge(
+    paths: RepoPaths, runner: Runner, item: PlannedEdge, outcome: MorphOutcome, echo: Echo
+) -> None:
+    """Rebuild one clip from its saved download; no paid call."""
+    raw = raw_path(paths, item.a, item.b)
+    echo(f"re-encoding {item.what} from {_rel(paths, raw)} (no new call) ...")
+    source = item.source_row or {}
+    row: dict[str, Any] = {
+        "id": genlog.new_row_id(),
+        "timestamp": genlog.utc_now(),
+        "kind": "morph",
+        "purpose": "reencode",
+        "provider": "ffmpeg",
+        "model": source.get("model"),
+        "scene": item.a,
+        "next_scene": item.b,
+        "source_row": source.get("id"),
+        "raw_path": _rel(paths, raw),
+        "raw_sha256": source.get("raw_sha256"),
+        "cost_estimate_usd": 0.0,
+        "cost_usd": 0.0,
+    }
+    started = time.monotonic()
+    try:
+        encoded, review, in_place = _finish_edge(
+            paths,
+            runner,
+            item,
+            raw,
+            model=source.get("model"),
+            cost=source.get("cost_usd"),
+            log_id=source.get("id"),
+            echo=echo,
+        )
+    except (ToolError, OSError, ValueError, PatchError) as error:
+        row.update(status="error", error=str(error))
+        echo(f"  failed: {error}")
+        outcome.failed.append(item.what)
+    else:
+        row.update(status="ok", error=None, **_output_fields(paths, encoded))
+        outcome.clips.append(review)
+        outcome.manifest_changed = True
+        if not in_place:
+            echo("  note: content/scenes.yaml was re-dumped; its comments were lost")
+        _report(review, echo)
+    row["duration_s"] = round(time.monotonic() - started, 2)
+    genlog.append_row(paths.generation_log, row)
+
+
+def _render_edge(
+    paths: RepoPaths,
+    veo: VeoProvider,
+    runner: Runner,
+    item: PlannedEdge,
+    outcome: MorphOutcome,
+    *,
+    style: StyleBlock,
+    guard: SpendGuard,
+    echo: Echo,
+    sleep: Callable[[float], None],
+    clock: Callable[[], float],
+) -> None:
+    """One paid Veo call, then the same finishing steps as a re-encode."""
+    raw = raw_path(paths, item.a, item.b)
+    guard.before_call(item.estimate, item.what)
+    row: dict[str, Any] = {
+        "id": genlog.new_row_id(),
+        "timestamp": genlog.utc_now(),
+        "kind": "morph",
+        "purpose": "morph",
+        "provider": veo.name,
+        "model": veo.model,
+        "scene": item.a,
+        "next_scene": item.b,
+        "prompt": item.prompt,
+        "parameters": _parameters(item.request),
+        "references": _references_log(paths, item.first, item.last),
+        "seed": None,
+        "style_block_sha256": style.sha256,
+        "cost_estimate_usd": item.estimate,
+    }
+    started = time.monotonic()
+    echo(f"rendering {item.what} with {veo.name} {veo.model} (about ${item.estimate:.2f}) ...")
+    stage = "start"
+    try:
+        operation = with_retries(
+            lambda: veo.start(
+                item.prompt,
+                item.first,
+                item.last,
+                item.request["config"]["resolution"],
+                item.request["config"]["duration_seconds"],
+            ),
+            what=item.what,
+            echo=echo,
+            sleep=sleep,
+        )
+        row["response_id"] = getattr(operation, "name", None)
+        stage = "render"
+        operation, polls = wait_for_operation(
+            veo, operation, what=item.what, echo=echo, sleep=sleep, clock=clock
+        )
+        row["polls"] = polls
+        stage = "done"
+        video = veo.finished_video(operation)
+        data = with_retries(
+            lambda: veo.download(video),
+            what=f"{item.what} (download)",
+            echo=echo,
+            sleep=sleep,
+        )
+    except MissingCredentials:
+        raise  # nothing was sent; the caller stops the run
+    except ProviderError as error:
+        cost, billing = failed_call_billing(stage, error, item.estimate)
+        row.update(
+            status="error",
+            error=str(error),
+            cost_usd=cost,
+            billing=billing,
+            duration_s=round(time.monotonic() - started, 2),
+        )
+        if billing in ("charged", "unknown") and row.get("response_id"):
+            # The video may exist on Google's side; with the operation name it can still be
+            # fetched (client.operations.get, then files.download) until it is deleted.
+            row["retrievable_until"] = _retrievable_until()
+        genlog.append_row(paths.generation_log, row)
+        if cost:
+            guard.record(f"{item.what} (failed, billing {billing})", cost)
+            outcome.spent += cost
+        echo(f"  failed: {error}")
+        if "retrievable_until" in row:
+            echo(
+                f"  counted as ${cost:.2f} (billing {billing}); operation {row['response_id']} "
+                f"can still be fetched until {row['retrievable_until']}"
+            )
+        outcome.failed.append(item.what)
+        return
+
+    # Paid for from here on: Veo bills per second of video, so the estimate is the cost.
+    cost = item.estimate
+    guard.record(item.what, cost)
+    outcome.spent += cost
+    row.update(
+        status="ok",
+        error=None,
+        cost_usd=cost,
+        billing="charged",
+        raw_mime_type=video.mime_type,
+        raw_path=_rel(paths, raw),
+        raw_sha256=sha256_bytes(data),
+        raw_bytes=len(data),
+    )
+    try:
+        atomic_write(raw, data)
+        row["raw_info"] = probe(runner, raw).as_dict()
+        encoded, review, in_place = _finish_edge(
+            paths, runner, item, raw, model=veo.model, cost=cost, log_id=row["id"], echo=echo
+        )
+    except (ToolError, OSError, ValueError, PatchError) as error:
+        row["postprocess_error"] = str(error)
+        echo(f"  post-processing failed: {error}")
+        echo("  the download is kept; the next run finishes it without a new call")
+        outcome.failed.append(item.what)
+    else:
+        row.update(_output_fields(paths, encoded))
+        outcome.clips.append(review)
+        outcome.manifest_changed = True
+        if not in_place:
+            echo("  note: content/scenes.yaml was re-dumped; its comments were lost")
+        _report(review, echo)
+    finally:
+        row["duration_s"] = round(time.monotonic() - started, 2)
+        genlog.append_row(paths.generation_log, row)
+
+
 def execute_plan(
     paths: RepoPaths,
     veo: VeoProvider,
@@ -863,151 +1164,31 @@ def execute_plan(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
 ) -> MorphOutcome:
-    """Render every planned edge, one after another; a failed edge does not stop the others,
-    a spend-limit stop ends the run."""
+    """Render every planned edge, one after another. A failed edge does not stop the others;
+    the spend limit or a missing key ends the run, and the outcome still says what changed so
+    the caller can bring scenes.json up to date with whatever was finished."""
     outcome = MorphOutcome()
     for item in plan.items:
-        raw = raw_path(paths, item.a, item.b)
-        if item.mode == "reencode":
-            echo(f"re-encoding {item.what} from {_rel(paths, raw)} (no new call) ...")
-            source = item.source_row or {}
-            row: dict[str, Any] = {
-                "id": genlog.new_row_id(),
-                "timestamp": genlog.utc_now(),
-                "kind": "morph",
-                "purpose": "reencode",
-                "provider": "ffmpeg",
-                "model": source.get("model"),
-                "scene": item.a,
-                "next_scene": item.b,
-                "source_row": source.get("id"),
-                "raw_path": _rel(paths, raw),
-                "raw_sha256": source.get("raw_sha256"),
-                "cost_estimate_usd": 0.0,
-                "cost_usd": 0.0,
-            }
-            started = time.monotonic()
-            try:
-                encoded, review, in_place = _finish_edge(
+        try:
+            if item.mode == "reencode":
+                _reencode_edge(paths, runner, item, outcome, echo)
+            else:
+                _render_edge(
                     paths,
+                    veo,
                     runner,
                     item,
-                    raw,
-                    model=source.get("model"),
-                    cost=source.get("cost_usd"),
-                    log_id=source.get("id"),
+                    outcome,
+                    style=style,
+                    guard=guard,
                     echo=echo,
+                    sleep=sleep,
+                    clock=clock,
                 )
-            except (ToolError, OSError, ValueError, PatchError) as error:
-                row.update(status="error", error=str(error))
-                echo(f"  failed: {error}")
-                outcome.failed.append(item.what)
-            else:
-                row.update(status="ok", error=None, **_output_fields(paths, encoded))
-                outcome.clips.append(review)
-                outcome.manifest_changed = True
-                if not in_place:
-                    echo("  note: content/scenes.yaml was re-dumped; its comments were lost")
-                _report(review, echo)
-            row["duration_s"] = round(time.monotonic() - started, 2)
-            genlog.append_row(paths.generation_log, row)
-            continue
-
-        guard.before_call(item.estimate, item.what)
-        row = {
-            "id": genlog.new_row_id(),
-            "timestamp": genlog.utc_now(),
-            "kind": "morph",
-            "purpose": "morph",
-            "provider": veo.name,
-            "model": veo.model,
-            "scene": item.a,
-            "next_scene": item.b,
-            "prompt": item.prompt,
-            "parameters": _parameters(item.request),
-            "references": _references_log(paths, item.first, item.last),
-            "seed": None,
-            "style_block_sha256": style.sha256,
-            "cost_estimate_usd": item.estimate,
-        }
-        started = time.monotonic()
-        echo(f"rendering {item.what} with {veo.name} {veo.model} (about ${item.estimate:.2f}) ...")
-        try:
-            operation = with_retries(
-                lambda item=item: veo.start(
-                    item.prompt,
-                    item.first,
-                    item.last,
-                    item.request["config"]["resolution"],
-                    item.request["config"]["duration_seconds"],
-                ),
-                what=item.what,
-                echo=echo,
-                sleep=sleep,
-            )
-            row["response_id"] = getattr(operation, "name", None)
-            operation, polls = wait_for_operation(
-                veo, operation, what=item.what, echo=echo, sleep=sleep, clock=clock
-            )
-            row["polls"] = polls
-            video = veo.finished_video(operation)
-            data = with_retries(
-                lambda video=video: veo.download(video),
-                what=f"{item.what} (download)",
-                echo=echo,
-                sleep=sleep,
-            )
-        except MissingCredentials:
-            raise  # nothing was sent; the run stops
-        except ProviderError as error:
-            row.update(
-                status="error",
-                error=str(error),
-                cost_usd=error.cost_usd,
-                duration_s=round(time.monotonic() - started, 2),
-            )
-            genlog.append_row(paths.generation_log, row)
-            if error.cost_usd:
-                guard.record(f"{item.what} (failed)", error.cost_usd)
-                outcome.spent += error.cost_usd
-            echo(f"  failed: {error}")
-            outcome.failed.append(item.what)
-            continue
-
-        # Paid for from here on: Veo bills per second of video, so the estimate is the cost.
-        cost = item.estimate
-        guard.record(item.what, cost)
-        outcome.spent += cost
-        row.update(
-            status="ok",
-            error=None,
-            cost_usd=cost,
-            raw_mime_type=video.mime_type,
-            raw_path=_rel(paths, raw),
-            raw_sha256=sha256_bytes(data),
-            raw_bytes=len(data),
-        )
-        try:
-            atomic_write(raw, data)
-            row["raw_info"] = probe(runner, raw).as_dict()
-            encoded, review, in_place = _finish_edge(
-                paths, runner, item, raw, model=veo.model, cost=cost, log_id=row["id"], echo=echo
-            )
-        except (ToolError, OSError, ValueError, PatchError) as error:
-            row["postprocess_error"] = str(error)
-            echo(f"  post-processing failed: {error}")
-            echo("  the download is kept; the next run finishes it without a new call")
-            outcome.failed.append(item.what)
-        else:
-            row.update(_output_fields(paths, encoded))
-            outcome.clips.append(review)
-            outcome.manifest_changed = True
-            if not in_place:
-                echo("  note: content/scenes.yaml was re-dumped; its comments were lost")
-            _report(review, echo)
-        finally:
-            row["duration_s"] = round(time.monotonic() - started, 2)
-            genlog.append_row(paths.generation_log, row)
+        except (SpendLimitExceeded, MissingCredentials) as error:
+            echo(f"error: {error}")
+            outcome.stopped = str(error)
+            break
     return outcome
 
 
@@ -1032,6 +1213,8 @@ def run_morph(
     duration: int = DEFAULT_DURATION,
     force: bool = False,
     reencode: bool = False,
+    named: bool = False,
+    keep_stale: bool = False,
     dry_run: bool = False,
     guard: SpendGuard | None = None,
     runner: Runner | None = None,
@@ -1055,6 +1238,8 @@ def run_morph(
             duration=duration,
             force=force,
             reencode=reencode,
+            named=named,
+            keep_stale=keep_stale,
             dry_run=dry_run,
         )
     except (StyleBlockError, ValueError) as error:
@@ -1063,6 +1248,13 @@ def run_morph(
 
     if plan.skipped:
         echo(f"clip already in place, skipped (use --force to redo): {', '.join(plan.skipped)}")
+    if plan.held:
+        echo(
+            "keeps the zoom, left alone (a clip for it was rejected, or --reencode was asked "
+            f"for a zoom edge); name it with --edge to work on it: {', '.join(plan.held)}"
+        )
+    for warning in plan.warnings:
+        echo(f"warning: {warning}")
     for note in plan.notes:
         echo(f"note: {note}")
     for problem in plan.problems:
@@ -1096,22 +1288,23 @@ def run_morph(
         runner = subprocess_runner
     try:
         echo(guard.check_plan(plan.estimate, description))
-        outcome = execute_plan(
-            paths,
-            veo,
-            plan,
-            runner,
-            style=style,
-            guard=guard,
-            echo=echo,
-            sleep=sleep,
-            clock=clock,
-        )
-    except (SpendLimitExceeded, MissingCredentials) as error:
+    except SpendLimitExceeded as error:
         echo(f"error: {error}")
         return 1
+    outcome = execute_plan(
+        paths,
+        veo,
+        plan,
+        runner,
+        style=style,
+        guard=guard,
+        echo=echo,
+        sleep=sleep,
+        clock=clock,
+    )
 
-    code = 1 if outcome.failed else 0
+    # However the loop ended, scenes.json must match the manifest edits that did happen.
+    code = 1 if outcome.failed or outcome.stopped else 0
     if outcome.manifest_changed:
         code = max(code, _export(paths, echo))
     try:
@@ -1121,6 +1314,8 @@ def run_morph(
         echo(f"review sheet: {_rel(paths, index)}")
     except (ManifestError, OSError) as error:
         echo(f"warning: could not write the review sheet: {error}")
+    if outcome.stopped:
+        echo(f"stopped early: {outcome.stopped}")
     echo(
         f"rendered {len(outcome.clips)} clip(s), {len(outcome.failed)} failed; "
         f"spent about ${outcome.spent:.2f}"
