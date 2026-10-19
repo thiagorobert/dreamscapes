@@ -4,8 +4,8 @@
   "scenes": [
     {
       "id": "cliff-cottage",
-      "title": "The cliff cottage",
-      "alt": "Placeholder for the cliff cottage: a soft gradient in dusty teal and lavender.",
+      "title": "The cottage on the cliff",
+      "alt": "A stone cottage with one lit window stands on a stormy sea cliff, a lighthouse glowing faintly across the cove, waves breaking on the rocks below and a rowing boat pulled up on the shingle.",
       "next": "prison-yard",
       "focal": [0.7, 0.3],
       "bridge": {
@@ -97,8 +97,8 @@
     },
     {
       "id": "prison-yard",
-      "title": "The yard",
-      "alt": "Placeholder for the yard: a soft gradient in dusty teal and lavender.",
+      "title": "The empty yard",
+      "alt": "An empty prison yard at night, with a cracked basketball court and its hoop, puddles and chain-link fences lit through the fog by floodlights and a watchtower built like a lighthouse.",
       "next": "rooftop-court",
       "focal": [0.62, 0.42],
       "bridge": {
@@ -162,8 +162,8 @@
     },
     {
       "id": "rooftop-court",
-      "title": "The rooftop court",
-      "alt": "Placeholder for the rooftop court: a soft gradient in dusty teal and lavender.",
+      "title": "Court above the city",
+      "alt": "A rooftop basketball court at blue hour above a sleeping city, a hot-air balloon drifting between dark towers beyond the parapet and a ball resting on the court under strings of unlit bulbs.",
       "next": "balloon-salt-flats",
       "focal": [0.36, 0.28],
       "bridge": {
@@ -255,12 +255,12 @@
     },
     {
       "id": "balloon-salt-flats",
-      "title": "The salt flats",
-      "alt": "Placeholder for the salt flats: a soft gradient in dusty teal and lavender.",
+      "title": "The salt mirror",
+      "alt": "At dawn a lone wooden door stands upright with nothing behind it on a mirror-flat salt lake, under a fleet of motionless hot-air balloons and beside an empty wicker basket lying on the salt.",
       "next": "endless-library",
       "focal": [0.55, 0.609038],
       "bridge": {
-        "object": "door",
+        "object": "wooden door",
         "polygon": [
           [0.5012, 0.7649],
           [0.5988, 0.7649],
@@ -332,7 +332,7 @@
     {
       "id": "endless-library",
       "title": "The endless library",
-      "alt": "Placeholder for the endless library: a soft gradient in dusty teal and lavender.",
+      "alt": "An impossibly tall library of spiralling shelves and ladders where dust drifts in shafts of light, with a door ajar below the shelves and an open birdcage, a globe and a lamp on a reading table.",
       "next": "overgrown-greenhouse",
       "focal": [0.42, 0.56],
       "bridge": {
@@ -398,8 +398,8 @@
     },
     {
       "id": "overgrown-greenhouse",
-      "title": "The greenhouse",
-      "alt": "Placeholder for the greenhouse: a soft gradient in dusty teal and lavender.",
+      "title": "The overgrown greenhouse",
+      "alt": "An overgrown Victorian greenhouse with fogged, dripping panes in the early evening, where a rusted bicycle leans against a potting bench and small birds roost around a birdcage hanging from the rafters.",
       "next": "mountain-road-phonebox",
       "focal": [0.3, 0.620015],
       "bridge": {
@@ -470,7 +470,7 @@
     {
       "id": "mountain-road-phonebox",
       "title": "The mountain road",
-      "alt": "Placeholder for the mountain road: a soft gradient in dusty teal and lavender.",
+      "alt": "A wet mountain road at night above a valley lost in mist, a glowing red telephone box at the hairpin bend with moths circling its light and an old bicycle leaning on the guardrail.",
       "next": "drowned-street",
       "focal": [0.66, 0.66],
       "bridge": {
@@ -535,7 +535,7 @@
     {
       "id": "drowned-street",
       "title": "The drowned street",
-      "alt": "Placeholder for the drowned street: a soft gradient in dusty teal and lavender.",
+      "alt": "A city street drowned under clear water, seen looking up from the pavement, where the hull of a passing ship darkens the bright surface above drifting fish, dark shop windows and an open telephone box whose handset floats on its cord.",
       "next": "fog-ship-deck",
       "focal": [0.5, 0.24],
       "bridge": {
@@ -598,8 +598,8 @@
     },
     {
       "id": "fog-ship-deck",
-      "title": "The ship in the fog",
-      "alt": "Placeholder for the ship in the fog: a soft gradient in dusty teal and lavender.",
+      "title": "Becalmed in fog",
+      "alt": "The empty deck of an old sailing ship becalmed in thick fog at night, a paper lantern glowing amber in the shrouds above the unattended wheel and a brass bell, the rigging fading into white.",
       "next": "lighthouse-gallery",
       "focal": [0.74, 0.500011],
       "bridge": {
@@ -665,7 +665,7 @@
     {
       "id": "lighthouse-gallery",
       "title": "The lamp room",
-      "alt": "Placeholder for the lamp room: a soft gradient in dusty teal and lavender.",
+      "alt": "From inside a lighthouse lamp room at dusk, a stone cottage with one lit window can be seen on the cliff across the inlet, beyond the great glowing lens, an oil can and a crumpled paper lantern.",
       "next": "cliff-cottage",
       "focal": [0.27, 0.42],
       "bridge": {
