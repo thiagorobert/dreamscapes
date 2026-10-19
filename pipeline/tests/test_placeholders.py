@@ -12,6 +12,7 @@ from dreamscapes_pipeline.placeholders import (
     placeholder_manifest,
     run_placeholders,
 )
+from dreamscapes_pipeline.validate import validate_repo
 from tests.conftest import file_hashes
 
 SLUGS = [
@@ -107,6 +108,20 @@ def test_authored_yaml_is_kept_and_flows_into_scenes_json(placeholder_repo):
     built = load_built_manifest(placeholder_repo.scenes_json)
     assert built.scenes[0].title == "An authored title"
     assert len(built.scenes[0].bridge.polygon) == len(PLACEHOLDER_SCENES[0].design.outline)
+
+
+def test_bracketed_numbers_in_titles_do_not_cause_drift(placeholder_repo):
+    manifest = load_manifest(placeholder_repo.scenes_yaml)
+    manifest.scenes[0].title = "Room [1,2]"
+    manifest.scenes[1].alt = "A yard with lamps [3,4]."
+    save_manifest(manifest, placeholder_repo.scenes_yaml)
+
+    run_placeholders(placeholder_repo)
+
+    built = load_built_manifest(placeholder_repo.scenes_json)
+    assert built.scenes[0].title == "Room [1,2]"
+    assert built.scenes[1].alt == "A yard with lamps [3,4]."
+    assert validate_repo(placeholder_repo).issues == []
 
 
 def test_force_restores_placeholder_content(placeholder_repo):

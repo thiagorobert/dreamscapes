@@ -397,7 +397,10 @@ def save_manifest(manifest: Manifest, path: Path) -> None:
     path.write_text(dump_manifest(manifest), encoding="utf-8")
 
 
-_NUMERIC_ARRAY = re.compile(r"\[\s*(-?[\d.eE+-]+(?:,\s*-?[\d.eE+-]+)*)\s*\]")
+# Matches an array of numbers as json.dumps(indent=2) lays it out: one element per line. JSON
+# strings cannot contain a raw newline, so anchoring on the newlines guarantees this never
+# touches bracketed numbers inside a title or alt text.
+_NUMERIC_ARRAY = re.compile(r"\[\n\s*(-?[\d.eE+-]+(?:,\n\s*-?[\d.eE+-]+)*)\n\s*\]")
 
 
 def dump_built_manifest(built: BuiltManifest) -> str:

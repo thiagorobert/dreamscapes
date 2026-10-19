@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 import yaml
 
 from dreamscapes_pipeline.manifest import (
+    BuiltManifest,
     Manifest,
     ManifestError,
     Transition,
@@ -44,6 +46,17 @@ def test_built_round_trip(placeholder_repo):
     text = placeholder_repo.scenes_json.read_text()
     built = load_built_manifest(placeholder_repo.scenes_json)
     assert dump_built_manifest(built) == text
+
+
+def test_bracketed_numbers_in_text_survive_the_built_manifest(placeholder_repo):
+    data = json.loads(placeholder_repo.scenes_json.read_text())
+    data["scenes"][0]["title"] = "Room [1,2]"
+    data["scenes"][0]["alt"] = "Shelves [3,4] and [ 5 ,6 ] and [-1.5e3,7]"
+    built = BuiltManifest.model_validate(data)
+    text = dump_built_manifest(built)
+    assert BuiltManifest.model_validate(json.loads(text)) == built
+    assert '"title": "Room [1,2]"' in text
+    assert '"focal": [0.7, 0.3]' in text  # number arrays are still kept on one line
 
 
 def test_polygon_may_be_empty_in_the_authored_manifest():
