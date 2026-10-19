@@ -74,6 +74,7 @@ import io
 import json
 import os
 import re
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -85,7 +86,8 @@ import yaml
 from PIL import Image
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from . import geometry
+from . import genlog, geometry
+from .imaging import sha256_file
 from .layout import MASTER_HEIGHT, MASTER_WIDTH, RepoPaths
 from .manifest import (
     Bridge,
@@ -251,10 +253,14 @@ class SegmentationProvider(Protocol):
 
     source: HotspotSource
     """What ``bridge.source`` records for polygons from this provider."""
+    provider: str
+    """The company or service called, as the generation log names it."""
     model: str
     call_estimate_usd: float
     last_cost_usd: float
-    """Cost of the most recent `segment` call, from the reported usage."""
+    """Cost of the most recent `segment` call, from the reported usage; 0 when the call failed
+    before an answer came back. Providers may also set ``last_request_id``,
+    ``last_response_id`` and ``last_usage`` for the generation log."""
 
     def segment(
         self, image_path: Path, concept: str, hint_box: BBox | None = None
@@ -659,6 +665,7 @@ class GeminiSegmenter:
     """Gemini segmentation through the Interactions API, as the image-understanding page shows."""
 
     source: HotspotSource = "gemini"
+    provider = "gemini"
     call_estimate_usd = GEMINI_CALL_ESTIMATE_USD
 
     def __init__(
@@ -673,6 +680,8 @@ class GeminiSegmenter:
         self.thinking_level = GEMINI_THINKING_LEVEL
         self.last_cost_usd = 0.0
         self.last_raw: str | None = None
+        self.last_response_id: str | None = None
+        self.last_usage: dict[str, Any] | None = None
 
     @property
     def client(self) -> Any:
@@ -724,6 +733,9 @@ class GeminiSegmenter:
     def segment(
         self, image_path: Path, concept: str, hint_box: BBox | None = None
     ) -> list[Candidate]:
+        # Nothing from an earlier call may be mistaken for this one's if it fails.
+        self.last_cost_usd, self.last_raw = 0.0, None
+        self.last_response_id, self.last_usage = None, None
         while True:
             try:
                 interaction = self.client.interactions.create(
@@ -735,10 +747,24 @@ class GeminiSegmenter:
                 if not _rejects_thinking_level(error) or stronger is None:
                     raise
                 self.thinking_level = stronger  # a refused request is not billed
+        usage = getattr(interaction, "usage", None)
         self.last_raw = interaction.output_text or ""
-        self.last_cost_usd = gemini_cost(getattr(interaction, "usage", None))
+        self.last_cost_usd = gemini_cost(usage)
+        self.last_response_id = getattr(interaction, "id", None) or None
+        self.last_usage = _usage_record(
+            usage, ("total_input_tokens", "total_output_tokens", "total_thought_tokens")
+        )
         candidates = (gemini_candidate(e, self.reading) for e in parse_gemini_masks(self.last_raw))
         return [c for c in candidates if c is not None]
+
+
+def _usage_record(usage: Any, names: Sequence[str]) -> dict[str, Any] | None:
+    """The token counts a provider reported, as plain data for the generation log."""
+    if usage is None:
+        return None
+    record = {name: getattr(usage, name, None) for name in names}
+    record = {name: value for name, value in record.items() if isinstance(value, int)}
+    return record or None
 
 
 def _rejects_thinking_level(error: Exception) -> bool:
@@ -793,13 +819,14 @@ class Sam3Segmenter:
     """SAM 3 on fal: text-prompted raster masks, outlined with `mask_to_polygon`."""
 
     source: HotspotSource = "sam3"
+    provider = "fal"
     model = SAM3_APP
     call_estimate_usd = SAM3_CALL_ESTIMATE_USD
 
     def __init__(self, client: Any | None = None, fetch: Callable[[str], bytes] | None = None):
         self._client = client
         self._fetch = fetch
-        self.last_cost_usd = SAM3_CALL_ESTIMATE_USD
+        self.last_cost_usd = 0.0
         self.last_raw: str | None = None
 
     @property
@@ -848,9 +875,12 @@ class Sam3Segmenter:
     def segment(
         self, image_path: Path, concept: str, hint_box: BBox | None = None
     ) -> list[Candidate]:
+        self.last_cost_usd, self.last_raw = 0.0, None
         result = self.client.subscribe(
             SAM3_APP, arguments=self.request(image_path, concept, hint_box)
         )
+        # fal reports no usage or price for this app, so an answered call costs the estimate.
+        self.last_cost_usd = SAM3_CALL_ESTIMATE_USD
         self.last_raw = json.dumps(
             {k: v for k, v in result.items() if k not in ("masks", "image")}, default=str
         )
@@ -909,14 +939,21 @@ def segmenter_name_from_env() -> SegmenterName:
 class FakeSegmenter:
     """Returns prepared candidate lists in turn (the last one repeats) and records each call."""
 
+    provider = "fake"
     model = "fake segmenter"
     call_estimate_usd = 0.0
 
-    def __init__(self, responses: Sequence[Sequence[Candidate]], source: HotspotSource = "gemini"):
+    def __init__(
+        self,
+        responses: Sequence[Sequence[Candidate]],
+        source: HotspotSource = "gemini",
+        cost_usd: float = 0.0,
+    ):
         if not responses:
             raise ValueError("FakeSegmenter needs at least one response")
         self.responses = [list(r) for r in responses]
         self.source = source
+        self.cost_usd = cost_usd
         self.calls: list[tuple[Path, str, BBox | None]] = []
         self.last_cost_usd = 0.0
 
@@ -924,6 +961,7 @@ class FakeSegmenter:
         self, image_path: Path, concept: str, hint_box: BBox | None = None
     ) -> list[Candidate]:
         self.calls.append((Path(image_path), concept, hint_box))
+        self.last_cost_usd = self.cost_usd
         return list(self.responses[min(len(self.calls), len(self.responses)) - 1])
 
 
@@ -934,6 +972,7 @@ class MaskFileSegmenter:
     should find. Without a mask file it returns the polygon already in the manifest.
     """
 
+    provider = "none"
     model = "the scene's mask file (dry run)"
     call_estimate_usd = 0.0
 
@@ -1098,9 +1137,14 @@ class VerificationError(RuntimeError):
 
 
 class Verifier(Protocol):
+    provider: str
+    """The company or service called, as the generation log names it."""
     model: str
     call_estimate_usd: float
     last_cost_usd: float
+    """Cost of the most recent `verify` call; 0 when it failed before an answer came back.
+    Verifiers may also set ``last_request_id``, ``last_response_id``, ``last_usage`` and
+    ``last_model`` (the model that answered) for the generation log."""
 
     def verify(
         self,
@@ -1159,6 +1203,7 @@ def parse_verdict(response: Any) -> Verdict:
 class ClaudeVerifier:
     """Asks Claude whether a tinted region is exactly the named object."""
 
+    provider = "anthropic"
     model = CLAUDE_MODEL
     call_estimate_usd = CLAUDE_CALL_ESTIMATE_USD
 
@@ -1168,6 +1213,8 @@ class ClaudeVerifier:
         self.last_cost_usd = 0.0
         self.last_model: str | None = None
         self.last_request_id: str | None = None
+        self.last_response_id: str | None = None
+        self.last_usage: dict[str, Any] | None = None
 
     @property
     def client(self) -> Any:
@@ -1233,12 +1280,26 @@ class ClaudeVerifier:
         concept: str,
         context: str | None = None,
     ) -> Verdict:
+        # Nothing from an earlier call may be mistaken for this one's if it fails.
+        self.last_cost_usd, self.last_model, self.last_request_id = 0.0, None, None
+        self.last_response_id, self.last_usage = None, None
         response = self.client.beta.messages.create(
             **self.request(image_path, polygon, concept, context)
         )
-        self.last_cost_usd = claude_cost(getattr(response, "usage", None))
+        usage = getattr(response, "usage", None)
+        self.last_cost_usd = claude_cost(usage)
         self.last_model = getattr(response, "model", None)
         self.last_request_id = getattr(response, "_request_id", None)
+        self.last_response_id = getattr(response, "id", None)
+        self.last_usage = _usage_record(
+            usage,
+            (
+                "input_tokens",
+                "cache_creation_input_tokens",
+                "cache_read_input_tokens",
+                "output_tokens",
+            ),
+        )
         return parse_verdict(response)
 
 
@@ -1257,24 +1318,28 @@ def verify_with_claude(
 class FakeVerifier:
     """Returns prepared verdicts in turn (the last one repeats) and records each call."""
 
+    provider = "fake"
     model = "fake verifier"
     call_estimate_usd = 0.0
 
-    def __init__(self, verdicts: Sequence[Verdict]):
+    def __init__(self, verdicts: Sequence[Verdict], cost_usd: float = 0.0):
         if not verdicts:
             raise ValueError("FakeVerifier needs at least one verdict")
         self.verdicts = list(verdicts)
+        self.cost_usd = cost_usd
         self.calls: list[tuple[Path, Polygon, str, str | None]] = []
         self.last_cost_usd = 0.0
 
     def verify(self, image_path, polygon, concept, context=None) -> Verdict:
         self.calls.append((Path(image_path), [tuple(p) for p in polygon], concept, context))
+        self.last_cost_usd = self.cost_usd
         return self.verdicts[min(len(self.calls), len(self.verdicts)) - 1]
 
 
 class DryRunVerifier:
     """Prints the request Claude would get and assumes "yes" so the rest of the run shows."""
 
+    provider = "none"
     model = "nobody (dry run)"
     call_estimate_usd = 0.0
 
@@ -1338,6 +1403,76 @@ def max_spend_from_env() -> float:
 
 
 @dataclass
+class CallLog:
+    """One row in pipeline/logs/generations.jsonl per segmentation or verification call.
+
+    Rows share the generation log's common fields (``id``, ``timestamp``, ``kind``,
+    ``purpose``, ``provider``, ``model``, ``scene``, ``status``, ``error``, ``duration_s``,
+    ``cost_estimate_usd``, ``cost_usd``) so `genlog.total_spend` counts hotspot calls with the
+    image and scoring calls. ``kind`` is ``segment`` or ``verify`` and ``purpose`` is
+    ``hotspot``. Both kinds add ``attempt``, ``concept``, ``image`` (path and SHA-256 of the
+    picture sent), ``request_id``, ``response_id`` and ``usage``; segment rows add
+    ``hint_box``, verify rows ``polygon_vertices``, ``served_model`` and ``matches``.
+    """
+
+    path: Path
+    scene: str
+    image: dict[str, str] | None = None
+
+    def start(self, kind: str, provider: Any, attempt: int, **fields: Any) -> dict[str, Any]:
+        return {
+            "id": genlog.new_row_id(),
+            "timestamp": genlog.utc_now(),
+            "kind": kind,
+            "purpose": "hotspot",
+            "provider": getattr(provider, "provider", None),
+            "model": getattr(provider, "model", None),
+            "scene": self.scene,
+            "attempt": attempt,
+            "image": self.image,
+            **fields,
+            "cost_estimate_usd": getattr(provider, "call_estimate_usd", None),
+        }
+
+    def finish(
+        self,
+        row: dict[str, Any],
+        provider: Any,
+        started: float,
+        error: BaseException | None = None,
+        **fields: Any,
+    ) -> str:
+        """Complete the row from what the provider recorded about the call and append it.
+
+        A call that failed after an answer came back (one that could not be read) was still
+        paid for, so its cost is kept; one that failed before has no known cost.
+        """
+        cost = getattr(provider, "last_cost_usd", 0.0) or 0.0
+        row.update(
+            status="error" if error is not None else "ok",
+            error=f"{type(error).__name__}: {error}" if error is not None else None,
+            request_id=getattr(provider, "last_request_id", None),
+            response_id=getattr(provider, "last_response_id", None),
+            usage=getattr(provider, "last_usage", None),
+            **fields,
+            cost_usd=round(cost, 6) if error is None or cost else None,
+            duration_s=round(time.monotonic() - started, 2),
+        )
+        genlog.append_row(self.path, row)
+        return row["id"]
+
+
+class _NoCallLog:
+    """Stands in for `CallLog` when nothing is to be logged (dry runs and unit tests)."""
+
+    def start(self, *_args: Any, **_fields: Any) -> dict[str, Any]:
+        return {}
+
+    def finish(self, *_args: Any, **_fields: Any) -> None:
+        return None
+
+
+@dataclass
 class Attempt:
     number: int
     hint_box: BBox | None
@@ -1348,6 +1483,8 @@ class Attempt:
     segment_cost_usd: float = 0.0
     verify_cost_usd: float = 0.0
     segmenter_raw: str | None = None
+    segment_log_id: str | None = None
+    verify_log_id: str | None = None
 
 
 @dataclass
@@ -1387,26 +1524,45 @@ def extract_hotspot(
     hint_box: BBox | None = None,
     context: str | None = None,
     spend: Spend | None = None,
+    log: CallLog | None = None,
     echo: Echo = lambda _: None,
 ) -> HotspotResult:
     """Segment, choose, clean and verify; on a "no", retry once with Claude's suggested box.
 
     The retry only happens when it would send something new: without a fresh suggestion the
     second request would be identical to the first, so the scene goes straight to manual work.
+    With ``log``, every segmentation and verification call gets a generation-log row, failed
+    ones included.
     """
     spend = spend if spend is not None else Spend(cap_usd=float("inf"))
+    calls: CallLog | _NoCallLog = log if log is not None else _NoCallLog()
     result = HotspotResult()
     hint = hint_box
     for number in range(1, ATTEMPTS + 1):
         where = f" inside box {_fmt_box(hint)}" if hint else ""
         spend.reserve(segmenter.call_estimate_usd, "segmentation")
-        candidates = segmenter.segment(image_path, concept, hint_box=hint)
+        row = calls.start(
+            "segment",
+            segmenter,
+            number,
+            concept=_concept(concept),
+            hint_box=list(hint) if hint else None,
+        )
+        started = time.monotonic()
+        try:
+            candidates = segmenter.segment(image_path, concept, hint_box=hint)
+        except Exception as error:
+            spend.add(segmenter.last_cost_usd)  # an unreadable answer was still paid for
+            calls.finish(row, segmenter, started, error)
+            raise
         segment_cost = segmenter.last_cost_usd
         spend.add(segment_cost)
+        segment_log_id = calls.finish(row, segmenter, started)
         chosen = choose_candidate(candidates)
         echo(f"  attempt {number}{where}: {len(candidates)} candidate(s)")
         polygon: Polygon | None = None
         verify_cost = 0.0
+        verify_log_id: str | None = None
         if chosen is None:
             verdict = Verdict(matches=False, reason=f"The segmenter found no {_concept(concept)}.")
         else:
@@ -1425,12 +1581,34 @@ def extract_hotspot(
                     f"frame, centroid {_fmt_point(geometry.centroid(polygon))}"
                 )
                 spend.reserve(verifier.call_estimate_usd, "verification")
+                row = calls.start(
+                    "verify",
+                    verifier,
+                    number,
+                    concept=_concept(concept),
+                    polygon_vertices=len(polygon),
+                )
+                started = time.monotonic()
+                unreadable: VerificationError | None = None
                 try:
                     verdict = verifier.verify(image_path, polygon, concept, context)
                 except VerificationError as error:
+                    unreadable = error
                     verdict = Verdict(matches=False, reason=f"Verification failed: {error}.")
+                except Exception as error:
+                    spend.add(verifier.last_cost_usd)
+                    calls.finish(row, verifier, started, error)
+                    raise
                 verify_cost = verifier.last_cost_usd
                 spend.add(verify_cost)
+                verify_log_id = calls.finish(
+                    row,
+                    verifier,
+                    started,
+                    unreadable,
+                    served_model=getattr(verifier, "last_model", None),
+                    matches=None if unreadable else verdict.matches,
+                )
                 echo(f"    verifier says {'yes' if verdict.matches else 'no'}: {verdict.reason}")
         result.attempts.append(
             Attempt(
@@ -1443,6 +1621,8 @@ def extract_hotspot(
                 segment_cost_usd=segment_cost,
                 verify_cost_usd=verify_cost,
                 segmenter_raw=getattr(segmenter, "last_raw", None),
+                segment_log_id=segment_log_id,
+                verify_log_id=verify_log_id,
             )
         )
         if verdict.matches:
@@ -1570,6 +1750,7 @@ def _attempt_record(attempt: Attempt) -> dict[str, Any]:
         "segment_cost_usd": round(attempt.segment_cost_usd, 6),
         "verify_cost_usd": round(attempt.verify_cost_usd, 6),
         "segmenter_raw": attempt.segmenter_raw,
+        "log_ids": {"segment": attempt.segment_log_id, "verify": attempt.verify_log_id},
     }
 
 
@@ -1619,6 +1800,10 @@ def _process_scene(
         f"{sid}: segmenting {_rel(paths, image_path)} ({image.width}x{image.height}) for "
         f"'{concept}' with {segmenter.model}"
     )
+    log = None  # a dry run sends nothing, so it has no calls to log
+    if not dry_run:
+        sent = {"path": _rel(paths, image_path), "sha256": sha256_file(image_path)}
+        log = CallLog(paths.generation_log, sid, sent)
     result = extract_hotspot(
         image_path,
         concept,
@@ -1628,6 +1813,7 @@ def _process_scene(
         hint_box=hint_box,
         context=scene.bridge.placement,
         spend=spend,
+        log=log,
         echo=echo,
     )
 
@@ -1826,6 +2012,7 @@ def run_hotspot_command(
     )
     if not dry_run:
         echo(f"spent: ${spend.spent_usd:.4f} (from the token usage the APIs reported)")
+        echo(genlog.spend_summary(paths.generation_log))
     if dry_run:
         return 1 if failed or broken else 0
     return 1 if manual or failed or broken else 0

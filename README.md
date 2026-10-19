@@ -117,6 +117,8 @@ that are already verified (add `--force` to redo them) and hand-drawn hotspots
 `DSP_SEGMENTATION_PROVIDER=sam3` switches to SAM 3 on fal (needs
 `uv sync --extra sam3` and `FAL_KEY`). Each run prints its spend estimate first and refuses to
 go past `DSP_MAX_SPEND_USD` (default 15); a scene costs about $0.03, about $0.06 with the retry.
+Every segmentation and verification call appends a row to `pipeline/logs/generations.jsonl`
+(`kind` `segment` or `verify`, `purpose` `hotspot`), so hotspot spend is counted with the rest.
 
 Checks: `uv run pytest -q`, `uv run ruff check .`, `uv run ruff format --check .`
 (`uv run ruff format .` to fix).

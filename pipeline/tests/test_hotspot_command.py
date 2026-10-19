@@ -10,7 +10,7 @@ import yaml
 from PIL import Image
 from typer.testing import CliRunner
 
-from dreamscapes_pipeline import geometry
+from dreamscapes_pipeline import genlog, geometry
 from dreamscapes_pipeline.cli import app
 from dreamscapes_pipeline.hotspots import (
     BRIDGE_FIELD_ORDER,
@@ -23,6 +23,7 @@ from dreamscapes_pipeline.hotspots import (
     Verdict,
     run_hotspot_command,
 )
+from dreamscapes_pipeline.imaging import sha256_file
 from dreamscapes_pipeline.manifest import load_manifest
 from dreamscapes_pipeline.validate import validate_repo
 from dreamscapes_pipeline.yaml_patch import set_scene_fields
@@ -352,7 +353,7 @@ def test_spend_cap_refuses_before_any_call(placeholder_repo, monkeypatch):
     assert segmenter.calls == [] and verifier.calls == []
 
 
-# --- how the mask points were read ---------------------------------------------------------------
+# --- how the mask points were read --------------------------------------------------------------
 
 SAVED = json.loads(
     (Path(__file__).parent / "fixtures" / "gemini_segmentation_responses.json").read_text()
@@ -418,3 +419,34 @@ def test_a_garbled_mask_is_warned_about(placeholder_repo):
     )
     record = json.loads((placeholder_repo.review_dir("prison-yard") / "hotspot.json").read_text())
     assert record["attempts"][0]["points_outside_box"] == pytest.approx(0.08, abs=0.005)
+
+
+# --- the generation log -------------------------------------------------------------------------
+
+
+def test_hotspot_calls_land_in_the_generation_log(placeholder_repo):
+    segmenter = FakeSegmenter([[hoop()]], cost_usd=0.002)
+    verifier = FakeVerifier([Verdict(matches=True, reason="The hoop.")], cost_usd=0.02)
+    code, out = run(placeholder_repo, segmenter=segmenter, verifier=verifier)
+    assert code == 0, out
+    rows = genlog.read_rows(placeholder_repo.generation_log)
+    assert [(r["kind"], r["purpose"], r["scene"]) for r in rows] == [
+        ("segment", "hotspot", "prison-yard"),
+        ("verify", "hotspot", "prison-yard"),
+    ]
+    graded = placeholder_repo.graded("prison-yard")
+    assert rows[0]["image"] == {
+        "path": "assets/masters/prison-yard.graded.png",
+        "sha256": sha256_file(graded),
+    }
+    assert [r["cost_usd"] for r in rows] == [0.002, 0.02]
+    record = json.loads((placeholder_repo.review_dir("prison-yard") / "hotspot.json").read_text())
+    assert record["attempts"][0]["log_ids"] == {"segment": rows[0]["id"], "verify": rows[1]["id"]}
+    assert "spend recorded in the generation log so far: $0.02 over 2 call(s)" in out
+
+
+def test_a_dry_run_logs_nothing(placeholder_repo, monkeypatch):
+    monkeypatch.chdir(placeholder_repo.root)
+    result = runner.invoke(app, ["hotspot", "--scene", "prison-yard", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert not placeholder_repo.generation_log.exists()

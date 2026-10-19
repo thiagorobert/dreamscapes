@@ -12,8 +12,9 @@ import pytest
 import yaml
 from PIL import Image
 
-from dreamscapes_pipeline import geometry, hotspots
+from dreamscapes_pipeline import genlog, geometry, hotspots
 from dreamscapes_pipeline.hotspots import (
+    CallLog,
     Candidate,
     ClaudeVerifier,
     FakeSegmenter,
@@ -334,7 +335,9 @@ class FakeInteractions:
         usage = SimpleNamespace(
             total_input_tokens=1200, total_output_tokens=300, total_thought_tokens=0
         )
-        return SimpleNamespace(output_text=self.outputs.pop(0), usage=usage)
+        return SimpleNamespace(
+            output_text=self.outputs.pop(0), usage=usage, id=f"interaction-{len(self.calls)}"
+        )
 
 
 @pytest.fixture
@@ -647,3 +650,157 @@ def test_updates_are_plain_yaml_data(scene_image):
 def test_rasterize_matches_the_polygon_area():
     polygon = box_polygon(0.25, 0.25, 0.5, 0.75)
     assert (rasterize(polygon, W, H) > 0).mean() == pytest.approx(0.125, rel=0.01)
+
+
+# --- one generation-log row per paid call --------------------------------------------------------
+
+HOOP_RESPONSE = json.dumps(
+    {"boxes": [{"box_2d": BOX, "mask": [[110, 210], [490, 210], [490, 590]], "label": "hoop"}]}
+)
+YES = {"matches": True, "reason": "The hoop.", "suggested_box": None}
+
+
+def call_log(tmp_path, scene_image) -> CallLog:
+    return CallLog(
+        tmp_path / "logs" / "generations.jsonl",
+        "prison-yard",
+        {"path": "assets/masters/prison-yard.graded.png", "sha256": "ab" * 32},
+    )
+
+
+def test_each_call_gets_a_generation_log_row(tmp_path, scene_image):
+    interactions = FakeInteractions([HOOP_RESPONSE])
+    segmenter = GeminiSegmenter(client=SimpleNamespace(interactions=interactions))
+    client, _ = fake_claude(claude_response(YES, id="msg_1", _request_id="req_1"))
+    log = call_log(tmp_path, scene_image)
+    spend = Spend(cap_usd=1.0)
+    result = extract_hotspot(
+        scene_image,
+        "the basketball hoop",
+        segmenter,
+        ClaudeVerifier(client),
+        image_size=(W, H),
+        spend=spend,
+        log=log,
+    )
+    segment, verify = genlog.read_rows(log.path)
+    common = {"purpose": "hotspot", "scene": "prison-yard", "attempt": 1, "status": "ok"}
+    assert (
+        segment.items()
+        >= (
+            common
+            | {
+                "kind": "segment",
+                "provider": "gemini",
+                "model": "gemini-3.8-flash",
+                "concept": "basketball hoop",
+                "hint_box": None,
+                "image": log.image,
+                "error": None,
+                "response_id": "interaction-1",
+                "usage": {
+                    "total_input_tokens": 1200,
+                    "total_output_tokens": 300,
+                    "total_thought_tokens": 0,
+                },
+                "cost_estimate_usd": 0.01,
+            }
+        ).items()
+    )
+    assert segment["cost_usd"] == pytest.approx((1200 * 0.75 + 300 * 3.75) / 1e6)
+    assert (
+        verify.items()
+        >= (
+            common
+            | {
+                "kind": "verify",
+                "provider": "anthropic",
+                "model": "claude-opus-5-5",
+                "served_model": "claude-opus-5-5",
+                "request_id": "req_1",
+                "response_id": "msg_1",
+                "usage": {"input_tokens": 3000, "output_tokens": 500},
+                "matches": True,
+                "cost_estimate_usd": 0.09,
+            }
+        ).items()
+    )
+    assert verify["cost_usd"] == pytest.approx((3000 * 4 + 500 * 20) / 1e6)
+    for row in (segment, verify):
+        assert {"id", "timestamp", "duration_s"} <= row.keys()
+    assert genlog.total_spend([segment, verify]) == pytest.approx(spend.spent_usd)
+    (attempt,) = result.attempts
+    assert (attempt.segment_log_id, attempt.verify_log_id) == (segment["id"], verify["id"])
+
+
+def test_a_retry_logs_four_calls(tmp_path, scene_image):
+    segmenter = FakeSegmenter([[cand(0.2, 0.2, 0.3, 0.3, "fence")], [GOOD]], cost_usd=0.002)
+    verifier = FakeVerifier(
+        [
+            Verdict(matches=False, reason="A fence.", suggested_box=(0.45, 0.4, 0.6, 0.6)),
+            Verdict(matches=True, reason="The hoop."),
+        ],
+        cost_usd=0.02,
+    )
+    log = call_log(tmp_path, scene_image)
+    extract_hotspot(scene_image, "hoop", segmenter, verifier, image_size=(W, H), log=log)
+    rows = genlog.read_rows(log.path)
+    assert [(r["kind"], r["attempt"]) for r in rows] == [
+        ("segment", 1),
+        ("verify", 1),
+        ("segment", 2),
+        ("verify", 2),
+    ]
+    assert [r["matches"] for r in rows if r["kind"] == "verify"] == [False, True]
+    assert rows[2]["hint_box"] == pytest.approx(list(expand_box((0.45, 0.4, 0.6, 0.6), 0.15)))
+    assert genlog.total_spend(rows) == pytest.approx(0.044)
+
+
+def test_an_unreadable_gemini_answer_is_logged_and_charged(tmp_path, scene_image):
+    interactions = FakeInteractions(["Here is the mask you asked for."])
+    segmenter = GeminiSegmenter(client=SimpleNamespace(interactions=interactions))
+    log = call_log(tmp_path, scene_image)
+    spend = Spend(cap_usd=1.0)
+    verifier = FakeVerifier([Verdict(matches=True, reason="unused")])
+    with pytest.raises(json.JSONDecodeError):
+        extract_hotspot(
+            scene_image, "hoop", segmenter, verifier, image_size=(W, H), spend=spend, log=log
+        )
+    (row,) = genlog.read_rows(log.path)
+    assert row["status"] == "error" and row["error"].startswith("JSONDecodeError")
+    assert row["cost_usd"] == pytest.approx(spend.spent_usd) and spend.spent_usd > 0
+
+
+def test_a_call_that_fails_before_answering_has_no_cost(tmp_path, scene_image):
+    down = RuntimeError("service unavailable")
+    down.status_code = 503
+    # The earlier successful call must not lend its cost or ids to the failed one.
+    interactions = FakeInteractions([HOOP_RESPONSE], errors=[])
+    segmenter = GeminiSegmenter(client=SimpleNamespace(interactions=interactions))
+    segmenter.segment(scene_image, "hoop")
+    interactions.errors.append(down)
+    log = call_log(tmp_path, scene_image)
+    verifier = FakeVerifier([Verdict(matches=True, reason="unused")])
+    with pytest.raises(RuntimeError, match="unavailable"):
+        extract_hotspot(scene_image, "hoop", segmenter, verifier, image_size=(W, H), log=log)
+    (row,) = genlog.read_rows(log.path)
+    assert row["status"] == "error"
+    assert row["cost_usd"] is None and row["response_id"] is None and row["usage"] is None
+
+
+def test_an_unreadable_verdict_is_logged_as_an_error_with_its_cost(tmp_path, scene_image):
+    client, _ = fake_claude(claude_response("not json"))
+    log = call_log(tmp_path, scene_image)
+    result = extract_hotspot(
+        scene_image,
+        "hoop",
+        FakeSegmenter([[GOOD]]),
+        ClaudeVerifier(client),
+        image_size=(W, H),
+        log=log,
+    )
+    assert not result.verified
+    segment, verify = genlog.read_rows(log.path)
+    assert verify["status"] == "error" and verify["error"].startswith("VerificationError")
+    assert verify["matches"] is None
+    assert verify["cost_usd"] == pytest.approx((3000 * 4 + 500 * 20) / 1e6)
