@@ -4,7 +4,8 @@ Image APIs are not deterministic, so the committed masters are the source of tru
 explains how each one was made. It is append-only and committed.
 
 Every row has ``id``, ``timestamp`` (UTC, ISO 8601), ``kind`` (``image`` for a generation call,
-``score`` for a Claude scoring call), ``purpose`` (``generate``, ``bakeoff`` or ``select``),
+``score`` for a Claude scoring call, ``segment`` and ``verify`` for the two calls behind a
+hotspot), ``purpose`` (``generate``, ``bakeoff``, ``select`` or ``hotspot``),
 ``provider``, ``model``, ``scene``, ``status`` (``ok`` or ``error``), ``error``,
 ``duration_s``, ``cost_estimate_usd`` and ``cost_usd`` (from the usage the provider reported,
 or null when it reported none).
@@ -18,6 +19,11 @@ block shows up as drift between scenes).
 Score rows add ``prompt`` (system and text parts), ``parameters``, ``images`` (label, path and
 SHA-256 of every image shown), ``request_id``, ``response_id``, ``served_model`` (differs from
 ``model`` when a server-side fallback answered) and ``usage``.
+
+Segment and verify rows (written by `dsp hotspot`, see `hotspots.CallLog`) add ``attempt``,
+``concept``, ``image`` (path and SHA-256 of the picture segmented), ``request_id``,
+``response_id`` and ``usage``; segment rows add ``hint_box``, verify rows
+``polygon_vertices``, ``served_model`` and ``matches`` (Claude's yes or no).
 """
 
 from __future__ import annotations

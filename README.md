@@ -96,18 +96,49 @@ retries once with the box Claude suggests; on a second "no" (or a "no" with no n
 sets `needs_manual_hotspot`, and `tools/annotate/index.html` is the way to draw it by hand. A
 verified outline replaces the hotspot fields under `bridge:` and the mask
 `assets/masks/<scene>.png`; a rejected one never does, so a failed run only marks the scene
-unverified and keeps its polygon. Comments and everything else in `content/scenes.yaml` stay as
-they were. Review overlays go to `assets/review/<scene>/`: `hotspot.png` is the hotspot the
-manifest now holds, `hotspot-<n>.png` each attempt, and `hotspot.json` describes them.
+unverified and keeps its polygon. The same goes for an outline Claude accepts that breaks the
+hotspot rules of `dsp validate` (too small, too big, off-centre): it is not kept, the scene is
+marked unverified with the reason, and the summary line counts it. Comments and everything else
+in `content/scenes.yaml` stay as they were. Review overlays go to `assets/review/<scene>/`: `hotspot.png` is the hotspot the
+manifest now holds, `hotspot-<n>-<reading>.png` each attempt, and `hotspot.json` describes them.
+
+Gemini does not always send its mask points in the documented `[x, y]` order: on half of the
+first real scenes they came back as `[y, x]` while the bounding box kept its order. So every
+mask is read all four ways (`xy-image`, `yx-image`, `xy-box`, `yx-box`: either order, 0-1000
+across the image or across the box), and the reading whose outline stays inside its own box and
+reaches across it wins, ties going to `xy-image`. The chosen reading is printed, named in the
+overlay file and recorded in `hotspot.json` with every reading's score; a warning is printed
+when even the best reading leaves mask points outside the box (some masks switch order
+part-way round, and those outlines are usually garbled).
 
 `--dry-run` prints the exact Gemini and Claude requests and runs the rest of the pipeline on the
 scene's committed mask. It sends nothing and leaves `content/scenes.yaml` and the masks alone,
 but still writes the review files under `assets/review/` (git-ignored). `--all` skips scenes
 that are already verified (add `--force` to redo them) and hand-drawn hotspots
-(`source: manual`); naming a scene with `--scene` always redoes it.
+(`source: manual`); naming a scene with `--scene` always redoes it. A verified hotspot records
+what it was checked against: the SHA-256 of the master (`verified_master_sha256`) and the
+picture actually segmented and shown to Claude, normally the graded copy (`verified_image`,
+`verified_image_sha256`). When either has changed since (say `dsp select` adopted another
+candidate, or the grade was retuned), `--all` treats the scene as unverified and redoes it. A
+scene whose graded copy is older than its master is refused with an error asking for
+`dsp grade` first, because the outline would be traced on the old picture.
 `DSP_SEGMENTATION_PROVIDER=sam3` switches to SAM 3 on fal (needs
 `uv sync --extra sam3` and `FAL_KEY`). Each run prints its spend estimate first and refuses to
 go past `DSP_MAX_SPEND_USD` (default 15); a scene costs about $0.03, about $0.06 with the retry.
+Every segmentation and verification call appends a row to `pipeline/logs/generations.jsonl`
+(`kind` `segment` or `verify`, `purpose` `hotspot`), so hotspot spend is counted with the rest;
+a call whose answer reported no token usage has a null `cost_usd` and counts at its estimate.
+
+Known limits of reading the mask points, all because only Gemini's box is used to judge, never
+the image:
+
+- A mask that switches order part-way round the outline cannot be read whole; it gets a warning
+  and usually a garbled outline that Claude rejects.
+- When a near-square box straddles the diagonal x = y, an outline and its mirror image both fit
+  it, so `xy-image` and `yx-image` can tie. `xy-image` is used and a warning says to check the
+  overlay.
+- The two box-relative readings always tie, so a `[y, x]` box-relative mask would be read as
+  `[x, y]`. Gemini has not been seen to send box-relative points.
 
 Checks: `uv run pytest -q`, `uv run ruff check .`, `uv run ruff format --check .`
 (`uv run ruff format .` to fix).
