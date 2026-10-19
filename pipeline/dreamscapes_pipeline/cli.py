@@ -211,7 +211,13 @@ def hotspot(
     dry_run: DryRunOpt = False,
 ) -> None:
     """Segment the bridge object into a hotspot polygon, verify it and write it to the YAML."""
-    _not_implemented("hotspot")
+    from .hotspots import run_hotspot_command
+
+    code = run_hotspot_command(
+        _repo(), scene=scene, all_scenes=all_, box=box, dry_run=dry_run, echo=typer.echo
+    )
+    if code:
+        raise typer.Exit(code)
 
 
 @app.command()
