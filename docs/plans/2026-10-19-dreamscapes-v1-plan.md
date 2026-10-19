@@ -14,7 +14,7 @@ What shipped:
 - Ten generated scenes in a closed loop (Gemini `gemini-nano-banana-2.1` at 2K, every scene anchored on `cliff-cottage`, picked by Claude, colour-graded), exported as AVIF and WebP at four widths with blurred previews.
 - A verified hotspot on every scene. Nine were traced by Gemini segmentation and confirmed by Claude; the bicycle was drawn by hand in `tools/annotate` and confirmed by Claude.
 - Nine Veo 3.1 Fast morph clips. The tenth edge keeps the CSS zoom.
-- The static site: vanilla TypeScript, 7.7 KB of gzipped JavaScript, unit tests and Playwright e2e at desktop and iPhone 13 sizes. CI runs the pipeline and web checks on both base paths.
+- The static site: vanilla TypeScript, 7.6 KB of gzipped JavaScript, unit tests and Playwright e2e at desktop and iPhone 13 sizes. CI runs the pipeline and web checks on both base paths.
 - Checked on the live site on 2026-10-19 with `pnpm walk` (in `web/`), at 1440x900 and in the iPhone 13 profile. All ten steps advanced the hash and counter. The nine clip edges each played their clip to 8.0 s, and the zoom edge zoomed. The loop closed at "dream 11". Back, forward, a deep link and an unknown hash behaved, with 0 console errors and 0 failed requests. Lighthouse (12.8 and 13.5) on the live site scored 100 in performance, accessibility, best practices and SEO, on both the desktop and mobile presets. The only sizeable flag is cache lifetime: GitHub Pages serves everything with `max-age=600`, which cannot be changed there.
 
 Merged pull requests (all in `thiagorobert/dreamscapes`):
@@ -29,8 +29,7 @@ Merged pull requests (all in `thiagorobert/dreamscapes`):
 | #6 | Produce the ten real scenes |
 | #7 | Fix Gemini mask point order and verify the five pending hotspots |
 | #8 | Add Veo morph clips between scenes (dsp morph) |
-
-The final QA, live-walk script and README how-tos are on the `finish-v1-qa-and-docs` branch.
+| #9 | Finish v1: live-site walk, Lighthouse check, README how-tos and plan status (this section) |
 
 Main deviations from this plan:
 - **Gemini's Interactions API instead of `generate_content`**, for both image generation (#5) and segmentation (#4), because that is the shape the current Gemini docs describe. Segmentation uses `gemini-3.8-flash`.
