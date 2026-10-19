@@ -50,6 +50,9 @@ STUBS = [
     ["bakeoff", "--dry-run"],
 ]
 
+# Commands whose stubs have been replaced; test_cli_pipeline.py covers them.
+IMPLEMENTED = {"generate", "select", "grade", "export", "review", "bakeoff"}
+
 
 def test_help_lists_every_command():
     help_text = plain_help(["--help"])
@@ -57,7 +60,9 @@ def test_help_lists_every_command():
         assert command in help_text
 
 
-@pytest.mark.parametrize("args", STUBS, ids=lambda a: " ".join(a))
+@pytest.mark.parametrize(
+    "args", [a for a in STUBS if a[0] not in IMPLEMENTED], ids=lambda a: " ".join(a)
+)
 def test_unimplemented_commands_accept_their_options_and_exit_2(args, small_repo, monkeypatch):
     monkeypatch.chdir(small_repo.root)
     result = runner.invoke(app, args)
