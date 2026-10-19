@@ -46,7 +46,6 @@ export function pointsAttribute(polygon: readonly Point[]): string {
 
 export class Hotspot {
   private svg: SVGSVGElement | undefined;
-  private shape: SVGPolygonElement | undefined;
   private hintTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly onActivate: () => void) {}
@@ -130,14 +129,12 @@ export class Hotspot {
     svg.append(defs, glow, shape);
     layer.root.append(svg);
     this.svg = svg;
-    this.shape = shape;
   }
 
   clear(): void {
     clearTimeout(this.hintTimer);
     this.svg?.remove();
     this.svg = undefined;
-    this.shape = undefined;
   }
 
   /**
@@ -166,10 +163,5 @@ export class Hotspot {
   /** A gentle pulse while the next scene is still loading after the object was clicked. */
   setPending(pending: boolean): void {
     this.svg?.classList.toggle('is-pending', pending);
-  }
-
-  /** The polygon element, for tests and focus handling. */
-  get element(): SVGPolygonElement | undefined {
-    return this.shape;
   }
 }

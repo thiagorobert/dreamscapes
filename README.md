@@ -45,6 +45,8 @@ pnpm preview      # serve the production build
 Checks: `pnpm lint` (ESLint and a Prettier check), `pnpm typecheck`, `pnpm test` (Vitest), and
 `pnpm e2e` (Playwright against the built site, so run `pnpm build` first; the first time, also
 run `pnpm exec playwright install chromium`). `pnpm format` rewrites files with Prettier.
+`pnpm build` also fails when the gzipped JavaScript passes its 30 KB budget, and `pnpm e2e` runs
+every test twice: on a 1440x900 desktop and in Playwright's iPhone 13 profile.
 
 GitHub Pages serves the site from `/dreamscapes/`, so the deploy workflow builds with
 `GITHUB_PAGES=1 pnpm build`, which sets that base path. Without the variable the site is built
