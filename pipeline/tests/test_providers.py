@@ -105,6 +105,21 @@ def test_gemini_generate_sends_base64_references_and_reads_the_image(reference):
     assert 0.05 < result.cost_estimate_usd < 0.08
 
 
+def test_gemini_cost_bills_unexplained_output_as_text():
+    from dreamscapes_pipeline.providers.gemini import _cost_from_usage
+
+    # The usage a real 1K call reported: output beyond the image tokens, plus thinking.
+    usage = {
+        "total_input_tokens": 1523,
+        "total_output_tokens": 1933,
+        "total_thought_tokens": 1098,
+        "output_tokens_by_modality": {"image": 1120},
+    }
+    expected = (1523 * 1.5 + 1120 * 30 + (813 + 1098) * 7.5) / 1e6
+    assert _cost_from_usage("gemini-nano-banana-2.1", usage) == pytest.approx(expected)
+    assert _cost_from_usage("gemini-nano-banana-2.1", {"total_output_tokens": 5}) is None
+
+
 def test_gemini_cost_estimates_follow_the_size():
     provider = GeminiImageProvider()
     one_k, two_k, four_k = (provider.estimate_cost(s, 0) for s in ("1K", "2K", "4K"))

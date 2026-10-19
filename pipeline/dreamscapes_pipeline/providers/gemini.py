@@ -14,12 +14,18 @@ Checked against https://ai.google.dev/gemini-api/docs/image-generation on 2026-1
 * Reference images: up to 14 in total (Nano Banana 2.1 takes up to 10 object images and up to
   5 character images). We attach at most one, the ungraded style anchor master.
 * Seed: the image docs do not mention one. The SDK's ``generation_config`` has a generic
-  ``seed`` field, so we send the seed there and log it, but nothing promises that the same seed
-  reproduces an image; the committed master stays the source of truth.
+  ``seed`` field, which the API accepts, so we send the seed there and log it; nothing promises
+  that the same seed reproduces an image, so the committed master stays the source of truth.
 * The final image is ``interaction.output_image`` (base64 ``data`` plus ``mime_type``); the
   response id is ``interaction.id``. Interim "thought images" appear only in ``steps``.
 * Watermark: every generated image carries Google's invisible SynthID watermark. It is
-  imperceptible, survives our grade and export, and needs no handling.
+  imperceptible and needs no handling here.
+
+Observed in a real 1K call on 2026-10-19: the image comes back as a JPEG (the response format
+offers no PNG option) of 1376x768, which is close to but not exactly 16:9, so candidates are
+stored as PNG and `dsp select` centre-crops and resizes the winner to the 2048x1152 master.
+``usage.total_output_tokens`` exceeded the image tokens by several hundred tokens that were not
+counted as thinking either; the cost below bills them at the text rate to stay on the safe side.
 
 Pricing (https://ai.google.dev/gemini-api/docs/pricing, standard tier): image output is $30 per
 million tokens, about $0.0336 for a 1K image, $0.0504 for 2K and $0.113 for 4K; input is $1.50
@@ -270,10 +276,14 @@ def _cost_from_usage(model: str, usage: dict[str, Any] | None) -> float | None:
         return None
     prices = _prices(model)
     by_modality = usage.get("output_tokens_by_modality", {})
-    image_tokens = by_modality.get("image", 0)
-    text_tokens = by_modality.get("text", 0) + usage.get("total_thought_tokens", 0)
-    if not by_modality:
-        image_tokens = usage.get("total_output_tokens", 0)
+    total_output = usage.get("total_output_tokens", 0)
+    thinking = usage.get("total_thought_tokens", 0)
+    if by_modality:
+        image_tokens = by_modality.get("image", 0)
+        # Output the modality breakdown does not explain is billed as text.
+        text_tokens = max(by_modality.get("text", 0), total_output - image_tokens) + thinking
+    else:
+        image_tokens, text_tokens = total_output, thinking
     cost = (
         usage["total_input_tokens"] * prices.input_per_million
         + image_tokens * prices.image_output_per_million
