@@ -11,6 +11,7 @@
 //     -map "[v]" -t 1.0 -c:v libx264 -profile:v baseline -level 3.0 -crf 32 \
 //     -movflags +faststart -an e2e/fixtures/morph.mp4
 
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { expect, test, type Page } from '@playwright/test';
@@ -29,14 +30,22 @@ import {
 
 const FIXTURE = fileURLToPath(new URL('fixtures/morph.mp4', import.meta.url));
 
+// fixtures/stall.mp4 is three seconds of ffmpeg's test pattern, large enough (about 68 KB) that
+// Chromium starts playing before all of it has arrived:
+//   ffmpeg -f lavfi -i "testsrc2=s=320x180:d=3:r=24" -c:v libx264 -profile:v baseline \
+//     -level 3.0 -pix_fmt yuv420p -crf 26 -movflags +faststart -an e2e/fixtures/stall.mp4
+const STALL_FIXTURE = fileURLToPath(new URL('fixtures/stall.mp4', import.meta.url));
+/** Bytes served before the network goes quiet: about 1.3 s of the 3 s clip. */
+const STALL_AFTER_BYTES = 48 * 1024;
+
 /** Serves scenes.json with a video transition on the start scene's edge. */
-async function useClip(page: Page, video: string): Promise<void> {
+async function useClip(page: Page, video: string, duration = 1): Promise<void> {
   await page.route('**/scenes.json', async (route) => {
     const response = await route.fetch();
     const data = (await response.json()) as Manifest;
     for (const scene of data.scenes) {
       if (scene.id === start.id) {
-        scene.transition = { type: 'video', video, duration: 1 };
+        scene.transition = { type: 'video', video, duration };
       }
     }
     await route.fulfill({ response, json: data });
@@ -114,6 +123,44 @@ test('a playable clip plays over the stage, then the next scene shows', async ({
   await expect(page.locator('.scene-layer')).toHaveCount(1);
   await expect(page.locator('#app')).toHaveAttribute('data-scene', start.next);
   await expect(page.locator('.depth')).toHaveText('dream 2');
+});
+
+test('a clip that stalls mid-play is cut short and the next scene shows', async ({
+  page,
+  hasTouch,
+}) => {
+  const clip = readFileSync(STALL_FIXTURE);
+  await useClip(page, 'morphs/stall.mp4', 3);
+  await page.route('**/morphs/stall.mp4', async (route) => {
+    const range = /bytes=(\d+)-/.exec(route.request().headers().range ?? '');
+    if (Number(range?.[1] ?? 0) === 0) {
+      await route.fulfill({
+        status: 206,
+        headers: {
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes 0-${String(STALL_AFTER_BYTES - 1)}/${String(clip.length)}`,
+          'Content-Type': 'video/mp4',
+        },
+        body: clip.subarray(0, STALL_AFTER_BYTES),
+      });
+    }
+    // Every later range request is left hanging, like a network that stopped delivering.
+  });
+  await open(page);
+  await expect.poll(() => bufferedClipState(page)).toBeGreaterThanOrEqual(3);
+
+  const clicked = Date.now();
+  await press(page, hasTouch, await hotspotCentre(page));
+  await expect(page.locator('.morph video')).toHaveCount(1);
+  await expect(page).toHaveURL(hashPattern(start.next));
+  const elapsed = Date.now() - clicked;
+  await waitUntilIdle(page);
+  await expect(page.locator('#app')).toHaveAttribute('data-transition', 'video');
+  await expect(page.locator('.morph')).toHaveCount(0);
+  await expect(page.locator('#app')).toHaveAttribute('data-scene', start.next);
+  // About 1.3 s of playing, then the 0.4 s stall grace and the fades. Waiting for the clip's
+  // full 3 s plus the 1.5 s end slack instead would take over 4.5 s.
+  expect(elapsed).toBeLessThan(3500);
 });
 
 test.describe('with reduced motion', () => {

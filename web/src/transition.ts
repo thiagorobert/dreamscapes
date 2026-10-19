@@ -7,7 +7,8 @@
  *   light at the hotspot sells the "dissolving into light" feel;
  * - video: when the edge has a pre-rendered morph clip, the clip plays over the stage while the
  *   stage swaps scenes underneath, with short crossfades in and out. If the clip fails, or is not
- *   playable within a second, the zoom runs instead;
+ *   playable and started within a second, the zoom runs instead; a clip that stalls mid-play is
+ *   cut short, revealing the new scene already waiting underneath;
  * - fade: with reduced motion, a plain crossfade with no scaling or blur.
  *
  * Every animation uses the Web Animations API, so its end is a promise rather than a guess.
@@ -33,6 +34,10 @@ export const TIMING = {
   clipFadeMs: 120,
   /** A clip that is not playable this soon after the click is skipped for the zoom. */
   clipReadyTimeoutMs: 1000,
+  /** A clip whose play() has not started it this soon is skipped for the zoom. */
+  clipStartTimeoutMs: 1000,
+  /** A clip that stops for data (waiting or stalled) this long is cut short. */
+  clipStallGraceMs: 400,
   /** Grace period past a clip's length before giving up on its `ended` event. */
   clipEndSlackMs: 1500,
 } as const;
@@ -180,19 +185,79 @@ export function whenPlayable(video: HTMLVideoElement, timeoutMs: number): Promis
   });
 }
 
-/** Resolves when `video` ends or errors, or after `limitMs` if neither happens. */
-function whenEnded(video: HTMLVideoElement, limitMs: number): Promise<void> {
+/**
+ * Resolves when `video` ends or errors; when it has been stuck waiting for data for
+ * `stallGraceMs` (a `waiting` or `stalled` event with no `playing` or progress after it); or
+ * after `limitMs` whatever happens. The incoming scene is already on stage under the clip, so
+ * cutting a stuck clip short just reveals it.
+ */
+function whenFinished(
+  video: HTMLVideoElement,
+  limitMs: number,
+  stallGraceMs: number,
+): Promise<void> {
   return new Promise((resolve) => {
-    const finish = (): void => {
-      clearTimeout(timer);
-      video.removeEventListener('ended', finish);
-      video.removeEventListener('error', finish);
-      resolve();
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
+    let stalledAt = 0;
+    const recover = (): void => {
+      clearTimeout(stallTimer);
+      stallTimer = undefined;
     };
-    const timer = setTimeout(finish, limitMs);
-    video.addEventListener('ended', finish);
-    video.addEventListener('error', finish);
+    const onStall = (): void => {
+      if (stallTimer === undefined) {
+        stalledAt = video.currentTime;
+        stallTimer = setTimeout(finish, stallGraceMs);
+      }
+    };
+    // `stalled` can also fire while playback carries on from the buffer, so moving time counts
+    // as recovery as well as an explicit `playing`.
+    const onTimeUpdate = (): void => {
+      if (video.currentTime > stalledAt) {
+        recover();
+      }
+    };
+    const listeners: [string, () => void][] = [
+      ['ended', finish],
+      ['error', finish],
+      ['waiting', onStall],
+      ['stalled', onStall],
+      ['playing', recover],
+      ['timeupdate', onTimeUpdate],
+    ];
+    function finish(): void {
+      clearTimeout(limitTimer);
+      recover();
+      for (const [type, listener] of listeners) {
+        video.removeEventListener(type, listener);
+      }
+      resolve();
+    }
+    const limitTimer = setTimeout(finish, limitMs);
+    for (const [type, listener] of listeners) {
+      video.addEventListener(type, listener);
+    }
   });
+}
+
+/** Starts `video`; false if it refuses or has not started within `timeoutMs`. */
+async function startClip(video: HTMLVideoElement, timeoutMs: number): Promise<boolean> {
+  try {
+    video.currentTime = 0;
+  } catch {
+    // Not seekable yet; it starts from wherever it is, which is the beginning.
+  }
+  const started = await Promise.race([
+    video.play().then(
+      () => true,
+      () => false,
+    ),
+    delay(timeoutMs).then(() => false),
+  ]);
+  if (!started) {
+    // Stops a play() that is still pending, so it cannot start behind the zoom.
+    video.pause();
+  }
+  return started;
 }
 
 function clipSeconds(video: HTMLVideoElement, scene: Scene): number {
@@ -216,10 +281,7 @@ async function playClip(
   }
   const overlay = stage.mountOverlay(clip, from.size, from.offset);
   overlay.style.opacity = '0';
-  try {
-    clip.currentTime = 0;
-    await clip.play();
-  } catch {
+  if (!(await startClip(clip, TIMING.clipStartTimeoutMs))) {
     overlay.remove();
     return null;
   }
@@ -241,7 +303,7 @@ async function playClip(
       fill: 'forwards',
     },
   );
-  await whenEnded(clip, remainingMs + TIMING.clipEndSlackMs);
+  await whenFinished(clip, remainingMs + TIMING.clipEndSlackMs, TIMING.clipStallGraceMs);
   await fade(overlay, 1, 0, TIMING.clipFadeMs);
   overlay.remove();
   return incoming;
