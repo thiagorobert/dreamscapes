@@ -6,7 +6,7 @@ import pytest
 import yaml
 from PIL import Image
 
-from dreamscapes_pipeline.manifest import load_manifest, save_manifest
+from dreamscapes_pipeline.manifest import Transition, load_manifest, save_manifest
 from dreamscapes_pipeline.validate import check_manifest, mentions, validate_repo
 from tests.conftest import good_manifest, square
 
@@ -219,6 +219,59 @@ def test_out_of_date_built_manifest_is_a_warning(placeholder_repo):
     assert result.errors == []
     warning = messages(result, "warning")[0]
     assert "out of date" in warning and "endless-library (title)" in warning
+
+
+def test_changed_focal_makes_the_built_manifest_out_of_date(placeholder_repo):
+    m = load_manifest(placeholder_repo.scenes_yaml)
+    m.scenes[2].focal = (0.5, 0.5)
+    save_manifest(m, placeholder_repo.scenes_yaml)
+    warnings = messages(validate_repo(placeholder_repo), "warning")
+    assert len(warnings) == 1 and "rooftop-court (focal)" in warnings[0], warnings
+
+
+def test_unset_focal_matches_the_centroid_it_resolves_to(placeholder_repo):
+    m = load_manifest(placeholder_repo.scenes_yaml)
+    assert all(scene.focal is None for scene in m.scenes)
+    # With polygons present the default is their centroid; with polygons cleared (as the
+    # content package leaves them) it is the built stand-in's centroid. Neither is drift.
+    assert validate_repo(placeholder_repo).issues == []
+    for scene in m.scenes:
+        scene.bridge.polygon = []
+    save_manifest(m, placeholder_repo.scenes_yaml)
+    warnings = messages(validate_repo(placeholder_repo), "warning")
+    assert warnings and all("has no polygon yet" in w for w in warnings), warnings
+
+
+def _video_repo(placeholder_repo, clip: str, duration: float):
+    """Give the first scene a video transition in both manifests, with the clip on disk."""
+    m = load_manifest(placeholder_repo.scenes_yaml)
+    m.scenes[0].transition = Transition(type="video", video=clip, duration=duration)
+    save_manifest(m, placeholder_repo.scenes_yaml)
+    path = placeholder_repo.public_file(clip)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"not really a video")
+    data = json.loads(placeholder_repo.scenes_json.read_text())
+    data["scenes"][0]["transition"] = {"type": "video", "video": clip, "duration": duration}
+    placeholder_repo.scenes_json.write_text(json.dumps(data))
+    return m
+
+
+def test_matching_video_transition_is_not_drift(placeholder_repo):
+    _video_repo(placeholder_repo, "morphs/cliff-cottage__prison-yard.mp4", 8)
+    assert validate_repo(placeholder_repo).issues == []
+
+
+@pytest.mark.parametrize(
+    ("clip", "duration"),
+    [("morphs/cliff-cottage__prison-yard.v2.mp4", 8), ("morphs/cliff-cottage__prison-yard.mp4", 6)],
+)
+def test_changed_clip_with_the_same_type_is_drift(placeholder_repo, clip, duration):
+    m = _video_repo(placeholder_repo, "morphs/cliff-cottage__prison-yard.mp4", 8)
+    m.scenes[0].transition = Transition(type="video", video=clip, duration=duration)
+    save_manifest(m, placeholder_repo.scenes_yaml)
+    placeholder_repo.public_file(clip).write_bytes(b"also not a video")
+    warnings = messages(validate_repo(placeholder_repo), "warning")
+    assert len(warnings) == 1 and "cliff-cottage (transition clip)" in warnings[0], warnings
 
 
 def test_invalid_built_manifest_is_an_error(placeholder_repo):

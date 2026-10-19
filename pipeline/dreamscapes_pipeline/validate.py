@@ -28,7 +28,15 @@ from PIL import Image
 
 from . import geometry
 from .layout import MASTER_HEIGHT, MASTER_WIDTH, RepoPaths, export_height
-from .manifest import BuiltManifest, Manifest, ManifestError, load_built_manifest, load_manifest
+from .manifest import (
+    BuiltManifest,
+    Manifest,
+    ManifestError,
+    Transition,
+    VideoTransition,
+    load_built_manifest,
+    load_manifest,
+)
 
 AREA_MIN = 0.015
 AREA_MAX = 0.12
@@ -261,6 +269,12 @@ def _built_drift(manifest: Manifest, built: BuiltManifest) -> list[str]:
         other = compiled.get(sid)
         if other is None:
             continue
+        authored_clip = _clip(scene.transition)
+        built_clip = (
+            (other.transition.video, other.transition.duration)
+            if isinstance(other.transition, VideoTransition)
+            else (None, None)
+        )
         changed = [
             name
             for name, a, b in (
@@ -269,16 +283,34 @@ def _built_drift(manifest: Manifest, built: BuiltManifest) -> list[str]:
                 ("alt", scene.alt, other.alt),
                 ("bridge object", scene.bridge.object, other.bridge.object),
                 ("transition", scene.transition.type, other.transition.type),
+                ("transition clip", authored_clip, built_clip),
             )
             if a != b
         ]
-        if len(scene.bridge.polygon) >= 3 and _polygon_differs(
-            scene.bridge.polygon, other.bridge.polygon
-        ):
+        has_polygon = len(scene.bridge.polygon) >= 3
+        if has_polygon and _polygon_differs(scene.bridge.polygon, other.bridge.polygon):
             changed.append("polygon")
+        # An unset focal means "the hotspot centroid", exactly as the build resolves it. While
+        # the authored polygon is still empty the build uses a stand-in polygon, whose centroid
+        # is the built one.
+        if scene.focal is not None:
+            expected_focal = scene.focal
+        elif has_polygon:
+            expected_focal = geometry.centroid(scene.bridge.polygon)
+        else:
+            expected_focal = other.bridge.centroid
+        if _differs(expected_focal, other.focal):
+            changed.append("focal")
         if changed:
             reasons.append(f"{sid} ({', '.join(changed)})")
     return reasons
+
+
+def _clip(transition: Transition) -> tuple[str | None, float | None]:
+    """The clip a transition plays, or (None, None) for the zoom transition."""
+    if transition.type != "video":
+        return (None, None)
+    return (transition.video, transition.duration)
 
 
 def _polygon_differs(a: list[tuple[float, float]], b: list[tuple[float, float]]) -> bool:
