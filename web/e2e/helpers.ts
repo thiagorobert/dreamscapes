@@ -29,19 +29,25 @@ export interface ScreenPoint {
 }
 
 /**
- * Serves scenes.json with every transition set to the zoom. Tests about the loop's mechanics use
- * it so each step takes about a second instead of a morph clip's eight; morph.spec.ts covers the
- * clips, including the real ones.
+ * The site with the morph clips switched on, as morph.spec.ts opens it to cover the clips.
  */
-export async function useZoomTransitions(page: Page): Promise<void> {
-  await page.route('**/scenes.json', async (route) => {
-    const response = await route.fetch();
-    const data = (await response.json()) as Manifest;
-    for (const scene of data.scenes) {
-      scene.transition = { type: 'zoom' };
+export const WITH_MORPHS = './?morph=1';
+
+/**
+ * The site with the morph clips switched off. The loop tests open this, so each step takes about
+ * a second instead of a clip's eight, whichever way DEFAULT_TRANSITION is set.
+ */
+export const WITHOUT_MORPHS = './?morph=0';
+
+/** Every request for a morph clip the page makes from now on, as a live list of URLs. */
+export function recordClipRequests(page: Page): string[] {
+  const urls: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.includes('/morphs/')) {
+      urls.push(request.url());
     }
-    await route.fulfill({ response, json: data });
   });
+  return urls;
 }
 
 /** Marks the first-visit overlay as already seen, so tests start on a bare scene. */

@@ -9,6 +9,15 @@ site is a static Vite + TypeScript page with no backend.
 
 **Live site:** <https://blog.thiago.pub/dreamscapes/> (GitHub Pages, deployed from `main`).
 
+Scenes change with the CSS dissolve by default. The pre-rendered morph clips are opt-in: the
+faint "morph off" switch in the bottom-left corner turns them on ("morph on") and the browser
+remembers the choice. A link can choose for the visitor with the `morph` query parameter, which
+goes before the hash: <https://blog.thiago.pub/dreamscapes/?morph=1#/prison-yard> turns the clips
+on, `?morph=0` turns them off, and either is remembered like a click on the switch. The order is:
+the parameter, then the remembered choice, then the default (`DEFAULT_TRANSITION` in
+`web/src/preference.ts`). With the dissolve, no clip is downloaded at all. Reduced-motion
+settings always get a short crossfade instead, whatever the switch says.
+
 The architecture and implementation plan lives in
 [`docs/plans/2026-10-19-dreamscapes-v1-plan.md`](docs/plans/2026-10-19-dreamscapes-v1-plan.md).
 
@@ -58,15 +67,18 @@ for the root path `/`. To test a Pages build locally:
 `GITHUB_PAGES=1 pnpm build && GITHUB_PAGES=1 pnpm e2e`.
 
 `pnpm walk <url>` checks a deployed copy, for example
-`pnpm walk https://blog.thiago.pub/dreamscapes/`. Unlike `pnpm e2e`, which tests a local build
-with the morph clips swapped for the quicker zoom, it drives the real site with its real clips,
-at 1440x900 and in the iPhone 13 profile. Each profile starts fresh and dismisses the first-visit
-overlay. It clicks or taps the centroid of every scene's hotspot polygon, and checks the address,
-the counter and the transition played at each step, plus the return to the start after the
-last scene. Then it checks back, forward, a deep link and an unknown hash. It prints every console
-error and failed request, and exits 1 if any check fails. `--json <file>` saves the report and
-`--screenshots <dir>` saves one picture per step. The walk takes about three minutes, because
-each clip plays for eight seconds.
+`pnpm walk https://blog.thiago.pub/dreamscapes/`. Unlike `pnpm e2e`, which tests a local build,
+it drives the deployed site, at 1440x900 and in the iPhone 13 profile. By default it walks with
+the dissolve (`?morph=0`) and fails if any morph clip is requested; `--morph`, or `?morph=1` in
+the URL it is given, walks with the real clips, and `--morph` wins if the two disagree. The
+report says which mode it used and why, and what the page's morph switch showed. Each profile
+starts fresh and dismisses the first-visit overlay. It clicks or taps the centroid of every
+scene's hotspot polygon, and checks the address, the counter and the transition played at each
+step, plus the return to the start after the last scene. Then it checks back, forward, a deep
+link and an unknown hash. It prints every console error and failed request, and exits 1 if any
+check fails. `--json <file>` saves the report and `--screenshots <dir>` saves one picture per
+step. With the dissolve the walk takes under a minute; with the clips it takes about three,
+because each clip plays for eight seconds.
 
 ## Running the pipeline
 
@@ -166,7 +178,8 @@ the PATH: `brew install ffmpeg`) drops it and re-encodes the video as H.264 (CRF
 lowered. Every 1080p encode so far came out between 6 and 9 MB, so all nine committed clips are
 1280x720 (1.8 to 3.9 MB each). The raw download is kept locally in `assets/candidates/morphs/`,
 so a clip whose post-processing failed is finished on the next run without paying again. The
-site falls back to the zoom whenever a clip fails or is slow to load. Reviewing, re-rendering
+site plays the clips only for visitors who switch them on (see the top of this README), and
+falls back to the zoom whenever a clip fails or is slow to load. Reviewing, re-rendering
 and rejecting clips are covered in
 [How to re-render or reject a morph clip](#how-to-re-render-or-reject-a-morph-clip).
 

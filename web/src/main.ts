@@ -4,6 +4,13 @@ import { Accessibility } from './a11y';
 import { Hotspot } from './hotspot';
 import { HintScheduler, showIntro, showRipple } from './hints';
 import { assetUrl, loadManifest, nextScene, type Dreams } from './manifest';
+import {
+  MorphToggle,
+  hrefWithPreference,
+  localPreferenceStore,
+  resolvePreference,
+  type TransitionPreference,
+} from './preference';
 import { Preloader, type PreparedPicture } from './preload';
 import { Router, type Route } from './router';
 import { Stage, type SceneLayer } from './stage';
@@ -68,12 +75,15 @@ class Dreamscapes {
   /** Set when the visitor used back/forward mid-transition; honoured once it ends. */
   private routeChangedWhileBusy = false;
   private introDone = false;
+  /** Dissolve or morph clips; read when a transition starts, so a switch mid-transition waits. */
+  private preference: TransitionPreference;
 
   constructor(
     private readonly root: HTMLElement,
     private readonly dreams: Dreams,
   ) {
     this.scene = dreams.start;
+    this.preference = resolvePreference(window.location.search, localPreferenceStore);
     root.dataset.busy = 'false';
     root.replaceChildren();
     this.stage = new Stage(root);
@@ -99,6 +109,12 @@ class Dreamscapes {
       viewportWidth: () => this.stage.viewport().width,
       resolve: assetUrl,
       clipHost,
+      // Reduced motion always gets the crossfade, so its clips would never play.
+      clipsEnabled: () => this.preference === 'morph' && !this.reducedMotion,
+    });
+    // Appended after the Continue button, so Tab reaches it second.
+    new MorphToggle(root, this.preference, (preference) => {
+      this.setPreference(preference);
     });
 
     this.stage.element.addEventListener('click', (event) => {
@@ -161,7 +177,7 @@ class Dreamscapes {
       from,
       to,
       picture,
-      clip: reducedMotion ? null : this.preloader.takeClip(from.scene),
+      clip: this.preloader.takeClip(from.scene),
       reducedMotion,
     });
     this.depth += 1;
@@ -170,6 +186,7 @@ class Dreamscapes {
 
   /** Back, forward, or an edited hash. */
   private onRoute(route: Route): void {
+    this.syncAddressWithPreference();
     if (this.busy) {
       this.routeChangedWhileBusy = true;
       return;
@@ -241,10 +258,38 @@ class Dreamscapes {
     void picture.ready
       .then(() => this.preloader.warm([next, afterNext]))
       .then(() => {
-        if (this.scene === layer.scene && !this.reducedMotion) {
+        // Not while a transition runs: that one is already leaving this scene, so its clip would
+        // only be wasted bandwidth. The scene that settles next buffers its own.
+        if (this.scene === layer.scene && !this.busy) {
           this.preloader.preloadClip(layer.scene);
         }
       });
+  }
+
+  /** The visitor flipped the morph toggle. */
+  private setPreference(preference: TransitionPreference): void {
+    this.preference = preference;
+    localPreferenceStore.write(preference);
+    this.syncAddressWithPreference();
+    if (preference === 'dissolve') {
+      this.preloader.releaseClips();
+    } else if (!this.busy) {
+      // Mid-transition, the scene that settles next starts its own clip instead.
+      this.preloader.preloadClip(this.scene);
+    }
+  }
+
+  /**
+   * Brings a ?morph= parameter in the current address in line with the visitor's choice. Each
+   * history entry keeps the address it was created with, and a reload re-applies (and saves)
+   * whatever that says; so this runs after every switch and on every entry back or forward
+   * lands on, or an old entry would quietly undo the switch.
+   */
+  private syncAddressWithPreference(): void {
+    const href = hrefWithPreference(window.location.href, this.preference);
+    if (href !== null && href !== window.location.href) {
+      window.history.replaceState(window.history.state, '', href);
+    }
   }
 
   private showDepth(): void {

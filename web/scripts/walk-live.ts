@@ -1,11 +1,16 @@
 // Walks a deployed copy of the site the way a visitor would and reports what happened.
 //
-// Usage: pnpm walk <url> [--json <file>] [--screenshots <dir>]
+// Usage: pnpm walk <url> [--morph] [--json <file>] [--screenshots <dir>]
 //   e.g. pnpm walk https://blog.thiago.pub/dreamscapes/
+//        pnpm walk 'https://blog.thiago.pub/dreamscapes/?morph=1'
 //
-// Unlike the e2e suite, which runs against a local build with the morph clips swapped for the
-// quicker zoom, this drives the real site with its real clips, at 1440x900 and in the iPhone 13
-// profile. For each it opens the site in a fresh browser profile, dismisses the first-visit
+// Unlike the e2e suite, which runs against a local build, this drives the deployed site at
+// 1440x900 and in the iPhone 13 profile. By default it walks with the CSS dissolve (?morph=0) and
+// checks that no morph clip is ever requested; --morph, or ?morph=1 in the given URL, walks with
+// the real clips. --morph wins over the URL. Every page is opened with the mode set in its
+// address, so the walk does not depend on the site's default, and the report says which mode it
+// used, why, and what the page's morph switch showed. For each profile
+// it opens the site in a fresh browser profile, dismisses the first-visit
 // overlay, clicks (or taps) the middle of every scene's hidden object, checks the address and the
 // depth counter after every step, notes which transition each step played, then checks the back
 // button and a deep link. Console errors, page errors, failed requests and HTTP errors are
@@ -54,9 +59,14 @@ interface StepReport {
   problems: string[];
 }
 
+type Mode = 'dissolve' | 'morph';
+
 interface ProfileReport {
   profile: string;
   viewport: string;
+  mode: Mode;
+  /** The text of the page's morph switch, or "missing" when there is none. */
+  morphSwitch: string;
   loadMs: number;
   firstImage: string;
   introShown: boolean;
@@ -73,6 +83,8 @@ interface ProfileReport {
   /** Requests the page itself cancelled, such as a preloaded clip it let go of. Not failures. */
   abortedRequests: string[];
   httpErrors: string[];
+  /** Requests for morph clips; there must be none when walking with the dissolve. */
+  clipRequests: string[];
   requests: number;
   ok: boolean;
 }
@@ -89,13 +101,25 @@ const PROFILES: { name: string; options: BrowserContextOptions }[] = [
 /** Generous: a morph clip runs for eight seconds and has to download first. */
 const STEP_TIMEOUT_MS = 45_000;
 
-function parseArgs(argv: string[]): { url: string; json?: string; screenshots?: string } {
+interface Args {
+  url: string;
+  mode: Mode;
+  /** Why this mode: the flag, the URL's parameter, or the default. */
+  modeReason: string;
+  json?: string;
+  screenshots?: string;
+}
+
+function parseArgs(argv: string[]): Args {
   let url: string | undefined;
   let json: string | undefined;
   let screenshots: string | undefined;
+  let mode: Mode = 'dissolve';
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === '--json') {
+    if (arg === '--morph') {
+      mode = 'morph';
+    } else if (arg === '--json') {
       json = argv[(i += 1)];
     } else if (arg === '--screenshots') {
       screenshots = argv[(i += 1)];
@@ -104,16 +128,36 @@ function parseArgs(argv: string[]): { url: string; json?: string; screenshots?: 
     }
   }
   if (!url) {
-    console.error('Usage: pnpm walk <url> [--json <file>] [--screenshots <dir>]');
+    console.error('Usage: pnpm walk <url> [--morph] [--json <file>] [--screenshots <dir>]');
     process.exit(2);
   }
+  const morphFlag = mode === 'morph';
   // The site resolves its files relative to the page, so the URL must end in a slash.
   const base = new URL(url);
   base.hash = '';
   if (!base.pathname.endsWith('/')) {
     base.pathname += '/';
   }
-  const result: { url: string; json?: string; screenshots?: string } = { url: base.href };
+  // A ?morph= the caller put in the URL chooses the mode unless --morph was given. The walk then
+  // sets it again on every address it opens, so it is taken off the base here.
+  const given = base.searchParams.get('morph');
+  base.searchParams.delete('morph');
+  const fromUrl = given === null ? null : modeFromParameter(given);
+  if (given !== null && fromUrl === null) {
+    console.error(`Unrecognised ?morph=${given} in the URL: use 1 (clips) or 0 (dissolve).`);
+    process.exit(2);
+  }
+  let modeReason = 'the default';
+  if (morphFlag) {
+    modeReason = '--morph';
+    if (given !== null && fromUrl !== 'morph') {
+      modeReason += `, which overrides ?morph=${given} in the URL`;
+    }
+  } else if (given !== null && fromUrl !== null) {
+    mode = fromUrl;
+    modeReason = `?morph=${given} in the URL`;
+  }
+  const result: Args = { url: base.href, mode, modeReason };
   if (json !== undefined) {
     result.json = json;
   }
@@ -121,6 +165,19 @@ function parseArgs(argv: string[]): { url: string; json?: string; screenshots?: 
     result.screenshots = screenshots;
   }
   return result;
+}
+
+/**
+ * The mode a ?morph= value asks for, read the way the site reads it (web/src/preference.ts),
+ * or null for a value the site would ignore. The script cannot import that module: Node runs
+ * this file directly and does not resolve the site's extensionless imports.
+ */
+function modeFromParameter(value: string): Mode | null {
+  const normalised = value.trim().toLowerCase();
+  if (['1', 'true', 'on'].includes(normalised)) {
+    return 'morph';
+  }
+  return ['0', 'false', 'off'].includes(normalised) ? 'dissolve' : null;
 }
 
 /** Area-weighted centroid of a polygon, as the pipeline computes it. */
@@ -141,6 +198,14 @@ function polygonCentroid(points: Point[]): Point {
     return [points.reduce((s, p) => s + p[0], 0) / n, points.reduce((s, p) => s + p[1], 0) / n];
   }
   return [cx / (6 * area), cy / (6 * area)];
+}
+
+/** The address to open: the site with its morph switch set to `mode` through the URL. */
+function addressFor(url: string, mode: Mode, hash = ''): string {
+  const address = new URL(url);
+  address.searchParams.set('morph', mode === 'morph' ? '1' : '0');
+  address.hash = hash;
+  return address.href;
 }
 
 async function waitIdle(page: Page): Promise<void> {
@@ -242,6 +307,7 @@ async function press(page: Page, touch: boolean, x: number, y: number): Promise<
 
 async function walkProfile(
   url: string,
+  mode: Mode,
   manifest: ManifestInfo,
   profile: { name: string; options: BrowserContextOptions },
   screenshots: string | undefined,
@@ -254,6 +320,8 @@ async function walkProfile(
   const report: ProfileReport = {
     profile: profile.name,
     viewport: viewport ? `${String(viewport.width)}x${String(viewport.height)}` : 'default',
+    mode,
+    morphSwitch: 'missing',
     loadMs: 0,
     firstImage: '',
     introShown: false,
@@ -269,6 +337,7 @@ async function walkProfile(
     failedRequests: [],
     abortedRequests: [],
     httpErrors: [],
+    clipRequests: [],
     requests: 0,
     ok: false,
   };
@@ -282,8 +351,11 @@ async function walkProfile(
     page.on('pageerror', (error) => {
       report.pageErrors.push(error.message);
     });
-    page.on('request', () => {
+    page.on('request', (request) => {
       report.requests += 1;
+      if (new URL(request.url()).pathname.includes('/morphs/')) {
+        report.clipRequests.push(request.url());
+      }
     });
     page.on('requestfailed', (request) => {
       const reason = request.failure()?.errorText ?? 'unknown';
@@ -304,7 +376,7 @@ async function walkProfile(
   const page = await context.newPage();
   watch(page);
   const started = Date.now();
-  await page.goto(url, { waitUntil: 'load' });
+  await page.goto(addressFor(url, mode), { waitUntil: 'load' });
   await page.waitForSelector('.scene-layer.is-current img.is-loaded', { timeout: STEP_TIMEOUT_MS });
   report.loadMs = Date.now() - started;
   report.firstImage = await page.evaluate(
@@ -326,6 +398,14 @@ async function walkProfile(
     report.introDismissed = (await intro.count()) === 0;
   }
   await waitIdle(page);
+  report.morphSwitch =
+    (
+      await page
+        .locator('.morph-toggle')
+        // A site from before the switch existed has none; do not wait long for it.
+        .textContent({ timeout: 3000 })
+        .catch(() => null)
+    )?.trim() ?? 'missing';
 
   let state = await appState(page);
   const expectedStart = manifest.start;
@@ -338,6 +418,12 @@ async function walkProfile(
   }
   if (state.counter !== 'dream 1') {
     problemsAtStart.push(`start counter "${state.counter}"`);
+  }
+  const expectedSwitch = mode === 'morph' ? 'morph on' : 'morph off';
+  if (report.morphSwitch !== expectedSwitch) {
+    problemsAtStart.push(
+      `morph switch reads "${report.morphSwitch}", expected "${expectedSwitch}"`,
+    );
   }
 
   for (let step = 1; step <= manifest.scenes.length; step += 1) {
@@ -382,7 +468,9 @@ async function walkProfile(
     state = await appState(page);
 
     const expectedCounter = `dream ${String(step + 1)}`;
-    const expectedTransition = from.transition.type === 'video' ? 'video' : 'zoom';
+    // With the dissolve every edge zooms, whatever scenes.json says about clips.
+    const expectedTransition =
+      mode === 'morph' && from.transition.type === 'video' ? 'video' : 'zoom';
     if (state.scene !== from.next) {
       problems.push(`scene ${state.scene}, expected ${from.next}`);
     }
@@ -469,7 +557,7 @@ async function walkProfile(
     manifest.start;
   const deep = await context.newPage();
   watch(deep);
-  await deep.goto(`${url}#/${deepId}`, { waitUntil: 'load' });
+  await deep.goto(addressFor(url, mode, `#/${deepId}`), { waitUntil: 'load' });
   await deep.waitForSelector('.scene-layer.is-current img.is-loaded', { timeout: STEP_TIMEOUT_MS });
   await waitIdle(deep);
   state = await appState(deep);
@@ -483,7 +571,7 @@ async function walkProfile(
   // An unknown scene falls back to the start scene and rewrites the address.
   const unknown = await context.newPage();
   watch(unknown);
-  await unknown.goto(`${url}#/no-such-dream`, { waitUntil: 'load' });
+  await unknown.goto(addressFor(url, mode, '#/no-such-dream'), { waitUntil: 'load' });
   await unknown.waitForSelector('.scene-layer.is-current', { timeout: STEP_TIMEOUT_MS });
   await waitIdle(unknown);
   state = await appState(unknown);
@@ -508,12 +596,14 @@ async function walkProfile(
     report.consoleErrors.length === 0 &&
     report.pageErrors.length === 0 &&
     report.failedRequests.length === 0 &&
-    report.httpErrors.length === 0;
+    report.httpErrors.length === 0 &&
+    (mode === 'morph' || report.clipRequests.length === 0);
   return report;
 }
 
 function printReport(report: ProfileReport): void {
-  console.log(`\n== ${report.profile} (${report.viewport}) ==`);
+  console.log(`\n== ${report.profile} (${report.viewport}), ${report.mode} ==`);
+  console.log(`morph switch on the page: ${report.morphSwitch}`);
   console.log(`first image on screen after ${String(report.loadMs)} ms: ${report.firstImage}`);
   console.log(
     `intro shown: ${String(report.introShown)}, dismissed: ${String(report.introDismissed)}`,
@@ -543,6 +633,10 @@ function printReport(report: ProfileReport): void {
     `unknown hash: ${report.unknownHash.ok ? 'ok' : 'FAIL'} (${report.unknownHash.detail})`,
   );
   console.log(`requests: ${String(report.requests)}`);
+  console.log(
+    `morph clip requests: ${String(report.clipRequests.length)}` +
+      (report.mode === 'dissolve' ? ' (must be 0 with the dissolve)' : ''),
+  );
   const lists: [string, string[]][] = [
     ['console errors', report.consoleErrors],
     ['page errors', report.pageErrors],
@@ -569,13 +663,17 @@ if (!response.ok) {
   process.exit(1);
 }
 const manifest = (await response.json()) as ManifestInfo;
+const modeNote =
+  args.mode === 'morph' ? 'with the morph clips (?morph=1)' : 'with the CSS dissolve (?morph=0)';
 console.log(
-  `Walking ${args.url} (${String(manifest.scenes.length)} scenes, start ${manifest.start})`,
+  `Walking ${args.url} ${modeNote} (${String(manifest.scenes.length)} scenes, ` +
+    `start ${manifest.start})`,
 );
+console.log(`Mode: ${args.mode}, chosen by ${args.modeReason}.`);
 
 const reports: ProfileReport[] = [];
 for (const profile of PROFILES) {
-  const report = await walkProfile(args.url, manifest, profile, args.screenshots);
+  const report = await walkProfile(args.url, args.mode, manifest, profile, args.screenshots);
   printReport(report);
   reports.push(report);
 }

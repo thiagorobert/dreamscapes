@@ -14,7 +14,7 @@ What shipped:
 - Ten generated scenes in a closed loop (Gemini `gemini-nano-banana-2.1` at 2K, every scene anchored on `cliff-cottage`, picked by Claude, colour-graded), exported as AVIF and WebP at four widths with blurred previews.
 - A verified hotspot on every scene. Nine were traced by Gemini segmentation and confirmed by Claude; the bicycle was drawn by hand in `tools/annotate` and confirmed by Claude.
 - Nine Veo 3.1 Fast morph clips. The tenth edge keeps the CSS zoom.
-- The static site: vanilla TypeScript, 7.6 KB of gzipped JavaScript, unit tests and Playwright e2e at desktop and iPhone 13 sizes. CI runs the pipeline and web checks on both base paths.
+- The static site: vanilla TypeScript, 7.6 KB of gzipped JavaScript at v1 (8.2 KB with the morph switch from #11), unit tests and Playwright e2e at desktop and iPhone 13 sizes. CI runs the pipeline and web checks on both base paths.
 - Checked on the live site on 2026-10-19 with `pnpm walk` (in `web/`), at 1440x900 and in the iPhone 13 profile. All ten steps advanced the hash and counter. The nine clip edges each played their clip to 8.0 s, and the zoom edge zoomed. The loop closed at "dream 11". Back, forward, a deep link and an unknown hash behaved, with 0 console errors and 0 failed requests. Lighthouse (12.8 and 13.5) on the live site scored 100 in performance, accessibility, best practices and SEO, on both the desktop and mobile presets. The only sizeable flag is cache lifetime: GitHub Pages serves everything with `max-age=600`, which cannot be changed there.
 
 Merged pull requests (all in `thiagorobert/dreamscapes`):
@@ -30,6 +30,8 @@ Merged pull requests (all in `thiagorobert/dreamscapes`):
 | #7 | Fix Gemini mask point order and verify the five pending hotspots |
 | #8 | Add Veo morph clips between scenes (dsp morph) |
 | #9 | Finish v1: live-site walk, Lighthouse check, README how-tos and plan status (this section) |
+
+After v1 (#11): having walked the live loop with the clips, Thiago preferred the CSS dissolve, so the clips became opt-in. The site plays the dissolve by default and fetches no clip. A faint "morph off / morph on" switch in the bottom-left corner, or `?morph=1` / `?morph=0` in the URL, turns the clips on or off, and the choice is remembered in localStorage. The default is `DEFAULT_TRANSITION` in `web/src/preference.ts`. `pnpm walk` walks with the dissolve unless given `--morph`.
 
 Main deviations from this plan:
 - **Gemini's Interactions API instead of `generate_content`**, for both image generation (#5) and segmentation (#4), because that is the shape the current Gemini docs describe. Segmentation uses `gemini-3.8-flash`.
@@ -82,7 +84,7 @@ Each row is a default chosen so implementation can start. Thiago can overrule an
 | Hotspot count | Exactly one per scene in v1. Schema allows a list so branching can be added later. | Matches the brief; keeps the authoring and validation simple. | Branching dreams are wanted. |
 | Hotspot discoverability | Cursor becomes a pointer over the hotspot (desktop). No glow on hover. A wrong click shows a soft ripple. After 20 s idle or 3 misses the hotspot shimmers once. A first-visit overlay says "Something in each dream leads to the next. Find it." | "Not obvious" but not frustrating. Touch devices have no hover, so the miss ripple and idle shimmer carry the hint there. All thresholds are constants in one file. | Thiago wants it harder (no pointer cursor) or easier (hover glow). |
 | Transition | v1: CSS "fall into the object": the current image zooms toward the hotspot and dissolves while the next image settles in. v2 (the "morph" package, in scope for this round): pre-rendered Veo 3.1 morph clip from image A to image B, with the CSS transition as fallback. | CSS version costs nothing, works offline, always matches the images exactly. Morph clips are the higher-wow option but cost ~$1 per edge and need review. | — |
-| On-screen chrome | Minimal: a faint "dreamscapes" wordmark top-left, a small "dream N" depth counter bottom-right, nothing else. No visible next/back buttons. | The image is the product. Keyboard and screen-reader users still get a visually hidden "continue to the next dream" control. | Thiago wants a fully bare screen or more UI. |
+| On-screen chrome | Minimal: a faint "dreamscapes" wordmark top-left, a small "dream N" depth counter bottom-right and, since #11, a faint "morph off / morph on" switch bottom-left; nothing else. No visible next/back buttons. | The image is the product. Keyboard and screen-reader users still get a visually hidden "continue to the next dream" control. | Thiago wants a fully bare screen or more UI. |
 | URL / deep links | Hash routes by scene slug (`/#/prison-yard`). Browser back returns to the previous dream. Landing with no hash shows scene 1. | Shareable, works on static hosting without rewrite rules. | — |
 | Sound | None. Morph videos are muted. | Autoplay with sound is blocked by browsers anyway. | — |
 | Analytics / telemetry | None. | Private toy; no need. | — |
@@ -97,7 +99,7 @@ Each row is a default chosen so implementation can start. Thiago can overrule an
 ## 3. Experience specification
 
 ### 3.1 Landing
-The page opens on scene 1 (`cliff-cottage`) filling the viewport. A blurred low-resolution placeholder paints instantly and the full image fades in over it. A one-time overlay (dismissed by any click or tap, remembered in `localStorage`) explains the single rule. The wordmark and depth counter fade to ~40% opacity after two seconds.
+The page opens on scene 1 (`cliff-cottage`) filling the viewport. A blurred low-resolution placeholder paints instantly and the full image fades in over it. A one-time overlay (dismissed by any click or tap, remembered in `localStorage`) explains the single rule. The wordmark, the depth counter and the morph switch fade to ~40% opacity after two seconds.
 
 ### 3.2 Exploring
 The user moves the pointer or taps around. Over the bridge object the cursor becomes a pointer. Clicking anywhere else triggers a soft, short ripple at the click point and nothing else. After 20 seconds without a successful click, or after 3 misses, the bridge object shimmers once (a 1.2 s soft luminance sweep clipped to the hotspot polygon). The idle timer resets after each shimmer and backs off (20 s, 40 s, 60 s) so it never nags.
