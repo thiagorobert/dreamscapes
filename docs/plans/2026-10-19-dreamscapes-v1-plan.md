@@ -31,7 +31,7 @@ Merged pull requests (all in `thiagorobert/dreamscapes`):
 | #8 | Add Veo morph clips between scenes (dsp morph) |
 | #9 | Finish v1: live-site walk, Lighthouse check, README how-tos and plan status (this section) |
 
-After v1 (#10): having walked the live loop with the clips, Thiago preferred the CSS dissolve, so the clips became opt-in. The site plays the dissolve by default and fetches no clip. A faint "morph off / morph on" switch in the bottom-left corner, or `?morph=1` / `?morph=0` in the URL, turns the clips on or off, and the choice is remembered in localStorage. The default is `DEFAULT_TRANSITION` in `web/src/preference.ts`. `pnpm walk` walks with the dissolve unless given `--morph`.
+After v1 (#11): having walked the live loop with the clips, Thiago preferred the CSS dissolve, so the clips became opt-in. The site plays the dissolve by default and fetches no clip. A faint "morph off / morph on" switch in the bottom-left corner, or `?morph=1` / `?morph=0` in the URL, turns the clips on or off, and the choice is remembered in localStorage. The default is `DEFAULT_TRANSITION` in `web/src/preference.ts`. `pnpm walk` walks with the dissolve unless given `--morph`.
 
 Main deviations from this plan:
 - **Gemini's Interactions API instead of `generate_content`**, for both image generation (#5) and segmentation (#4), because that is the shape the current Gemini docs describe. Segmentation uses `gemini-3.8-flash`.
