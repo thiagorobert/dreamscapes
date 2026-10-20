@@ -8,7 +8,8 @@
  * previous one for the back button.
  *
  * Morph clips are preloaded with a muted, off-screen `<video preload="auto">`, because
- * `<link rel="preload" as="video">` is not reliably honoured by browsers.
+ * `<link rel="preload" as="video">` is not reliably honoured by browsers. They are only fetched
+ * while the visitor has the clips switched on (see preference.ts) and motion is not reduced.
  */
 
 import type { ImageSource, Scene } from './types';
@@ -81,6 +82,11 @@ export interface PreloaderOptions {
   resolve: (path: string) => string;
   /** Where off-screen clip elements live while they buffer. */
   clipHost: HTMLElement;
+  /**
+   * Whether morph clips may be fetched at all. While false no clip is requested or buffered:
+   * each one is a few megabytes the dissolve does not need.
+   */
+  clipsEnabled: () => boolean;
   pixelRatio?: () => number;
   capacity?: number;
 }
@@ -173,15 +179,22 @@ export class Preloader {
     }
   }
 
-  /** Starts buffering the morph clip that leaves `scene`, dropping any other buffered clip. */
+  /**
+   * Starts buffering the morph clip that leaves `scene`, dropping any other buffered clip. Does
+   * nothing (beyond the dropping) while clips are disabled.
+   */
   preloadClip(scene: Scene): void {
     for (const [id, video] of this.clips) {
-      if (id !== scene.id) {
+      if (id !== scene.id || !this.options.clipsEnabled()) {
         releaseClip(video);
         this.clips.delete(id);
       }
     }
-    if (scene.transition.type !== 'video' || this.clips.has(scene.id)) {
+    if (
+      !this.options.clipsEnabled() ||
+      scene.transition.type !== 'video' ||
+      this.clips.has(scene.id)
+    ) {
       return;
     }
     const video = createClip(this.options.resolve(scene.transition.video));
@@ -189,11 +202,23 @@ export class Preloader {
     this.clips.set(scene.id, video);
   }
 
+  /** Drops every buffered clip, e.g. when the visitor switches the clips off. */
+  releaseClips(): void {
+    for (const video of this.clips.values()) {
+      releaseClip(video);
+    }
+    this.clips.clear();
+  }
+
   /**
    * Hands over the clip that leaves `scene` (buffered if possible, otherwise just started), or
-   * null when that edge has no clip. The caller owns the element afterwards.
+   * null when that edge has no clip or clips are disabled. The caller owns the element afterwards.
    */
   takeClip(scene: Scene): HTMLVideoElement | null {
+    if (!this.options.clipsEnabled()) {
+      this.releaseClips();
+      return null;
+    }
     if (scene.transition.type !== 'video') {
       return null;
     }
