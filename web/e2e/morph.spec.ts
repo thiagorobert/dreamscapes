@@ -1,6 +1,7 @@
-// The morph-clip transition. Most tests rewrite scenes.json in flight to give the start scene's
-// edge a fixture clip, so they control exactly how the clip loads; one plays the real clip the
-// committed manifest names for that edge.
+// The morph-clip transition. Every test opens the site with ?morph=1, since visitors get the
+// dissolve until they switch the clips on. Most tests rewrite scenes.json in flight to give the
+// start scene's edge a fixture clip, so they control exactly how the clip loads; one plays the
+// real clip the committed manifest names for that edge.
 //
 // fixtures/morph.mp4 is one second of H.264 at 320x180, a crossfade between the first two
 // placeholder scenes, made with:
@@ -24,9 +25,11 @@ import {
   hotspotCentre,
   open,
   press,
+  recordClipRequests,
   skipIntro,
   start,
   waitUntilIdle,
+  WITH_MORPHS,
 } from './helpers';
 
 const FIXTURE = fileURLToPath(new URL('fixtures/morph.mp4', import.meta.url));
@@ -66,7 +69,7 @@ test.beforeEach(async ({ page }) => {
 
 test('a missing clip falls back to the zoom', async ({ page, hasTouch }) => {
   await useClip(page, 'morphs/does-not-exist.mp4');
-  await open(page);
+  await open(page, WITH_MORPHS);
   await advance(page, hasTouch);
   await expect(page.locator('#app')).toHaveAttribute('data-transition', 'zoom-fallback');
   await expect(page.locator('.depth')).toHaveText('dream 2');
@@ -86,7 +89,7 @@ test('a clip that is not playable within a second falls back to the zoom', async
       // The test already finished and closed the page.
     }
   });
-  await open(page);
+  await open(page, WITH_MORPHS);
   const clicked = Date.now();
   await advance(page, hasTouch);
   await expect(page.locator('#app')).toHaveAttribute('data-transition', 'zoom-fallback');
@@ -102,7 +105,7 @@ test('a playable clip plays over the stage, then the next scene shows', async ({
   await page.route('**/morphs/e2e-fixture.mp4', (route) =>
     route.fulfill({ path: FIXTURE, contentType: 'video/mp4' }),
   );
-  await open(page);
+  await open(page, WITH_MORPHS);
   // The clip buffers off-screen once the next images are in.
   await expect.poll(() => bufferedClipState(page)).toBeGreaterThanOrEqual(3);
 
@@ -134,7 +137,7 @@ test("the start scene's real clip plays from the committed manifest", async ({
   test.skip(clip === null, 'the start scene has no morph clip in scenes.json');
   // An eight-second clip, plus buffering and the fades.
   test.setTimeout(60_000);
-  await open(page);
+  await open(page, WITH_MORPHS);
   await expect.poll(() => bufferedClipState(page), { timeout: 20_000 }).toBeGreaterThanOrEqual(3);
 
   await press(page, hasTouch, await hotspotCentre(page));
@@ -180,7 +183,7 @@ test('a clip that stalls mid-play is cut short and the next scene shows', async 
     }
     // Every later range request is left hanging, like a network that stopped delivering.
   });
-  await open(page);
+  await open(page, WITH_MORPHS);
   await expect.poll(() => bufferedClipState(page)).toBeGreaterThanOrEqual(3);
 
   const clicked = Date.now();
@@ -200,13 +203,19 @@ test('a clip that stalls mid-play is cut short and the next scene shows', async 
 test.describe('with reduced motion', () => {
   test.use({ reducedMotion: 'reduce' });
 
-  test('the clip is skipped for the crossfade', async ({ page, hasTouch }) => {
+  test('the clip is skipped for the crossfade, and never fetched', async ({ page, hasTouch }) => {
+    const clips = recordClipRequests(page);
     await useClip(page, 'morphs/e2e-fixture.mp4');
     await page.route('**/morphs/e2e-fixture.mp4', (route) =>
       route.fulfill({ path: FIXTURE, contentType: 'video/mp4' }),
     );
-    await open(page);
+    await open(page, WITH_MORPHS);
+    await expect(page.getByRole('button', { name: 'morph on' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await advance(page, hasTouch);
     await expect(page.locator('#app')).toHaveAttribute('data-transition', 'fade');
+    expect(clips).toEqual([]);
   });
 });

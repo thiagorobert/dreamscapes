@@ -16,14 +16,12 @@ import {
   screenPoint,
   skipIntro,
   start,
-  useZoomTransitions,
   waitUntilIdle,
 } from './helpers';
 
 test.describe('walking the loop', () => {
   test.beforeEach(async ({ page }) => {
     await skipIntro(page);
-    await useZoomTransitions(page);
   });
 
   test('opens on the start scene with the wordmark and counter', async ({ page }) => {
