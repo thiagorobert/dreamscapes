@@ -2,12 +2,14 @@
 //
 // Usage: pnpm walk <url> [--morph] [--json <file>] [--screenshots <dir>]
 //   e.g. pnpm walk https://blog.thiago.pub/dreamscapes/
+//        pnpm walk 'https://blog.thiago.pub/dreamscapes/?morph=1'
 //
 // Unlike the e2e suite, which runs against a local build, this drives the deployed site at
 // 1440x900 and in the iPhone 13 profile. By default it walks with the CSS dissolve (?morph=0) and
-// checks that no morph clip is ever requested; --morph walks with the real clips (?morph=1). The
-// mode is set in the address explicitly, so the walk does not depend on the site's default, and
-// the report says which one it used and what the page's morph switch showed. For each profile
+// checks that no morph clip is ever requested; --morph, or ?morph=1 in the given URL, walks with
+// the real clips. --morph wins over the URL. Every page is opened with the mode set in its
+// address, so the walk does not depend on the site's default, and the report says which mode it
+// used, why, and what the page's morph switch showed. For each profile
 // it opens the site in a fresh browser profile, dismisses the first-visit
 // overlay, clicks (or taps) the middle of every scene's hidden object, checks the address and the
 // depth counter after every step, notes which transition each step played, then checks the back
@@ -102,6 +104,8 @@ const STEP_TIMEOUT_MS = 45_000;
 interface Args {
   url: string;
   mode: Mode;
+  /** Why this mode: the flag, the URL's parameter, or the default. */
+  modeReason: string;
   json?: string;
   screenshots?: string;
 }
@@ -127,14 +131,33 @@ function parseArgs(argv: string[]): Args {
     console.error('Usage: pnpm walk <url> [--morph] [--json <file>] [--screenshots <dir>]');
     process.exit(2);
   }
+  const morphFlag = mode === 'morph';
   // The site resolves its files relative to the page, so the URL must end in a slash.
   const base = new URL(url);
   base.hash = '';
   if (!base.pathname.endsWith('/')) {
     base.pathname += '/';
   }
-  base.search = '';
-  const result: Args = { url: base.href, mode };
+  // A ?morph= the caller put in the URL chooses the mode unless --morph was given. The walk then
+  // sets it again on every address it opens, so it is taken off the base here.
+  const given = base.searchParams.get('morph');
+  base.searchParams.delete('morph');
+  const fromUrl = given === null ? null : modeFromParameter(given);
+  if (given !== null && fromUrl === null) {
+    console.error(`Unrecognised ?morph=${given} in the URL: use 1 (clips) or 0 (dissolve).`);
+    process.exit(2);
+  }
+  let modeReason = 'the default';
+  if (morphFlag) {
+    modeReason = '--morph';
+    if (given !== null && fromUrl !== 'morph') {
+      modeReason += `, which overrides ?morph=${given} in the URL`;
+    }
+  } else if (given !== null && fromUrl !== null) {
+    mode = fromUrl;
+    modeReason = `?morph=${given} in the URL`;
+  }
+  const result: Args = { url: base.href, mode, modeReason };
   if (json !== undefined) {
     result.json = json;
   }
@@ -142,6 +165,19 @@ function parseArgs(argv: string[]): Args {
     result.screenshots = screenshots;
   }
   return result;
+}
+
+/**
+ * The mode a ?morph= value asks for, read the way the site reads it (web/src/preference.ts),
+ * or null for a value the site would ignore. The script cannot import that module: Node runs
+ * this file directly and does not resolve the site's extensionless imports.
+ */
+function modeFromParameter(value: string): Mode | null {
+  const normalised = value.trim().toLowerCase();
+  if (['1', 'true', 'on'].includes(normalised)) {
+    return 'morph';
+  }
+  return ['0', 'false', 'off'].includes(normalised) ? 'dissolve' : null;
 }
 
 /** Area-weighted centroid of a polygon, as the pipeline computes it. */
@@ -633,6 +669,7 @@ console.log(
   `Walking ${args.url} ${modeNote} (${String(manifest.scenes.length)} scenes, ` +
     `start ${manifest.start})`,
 );
+console.log(`Mode: ${args.mode}, chosen by ${args.modeReason}.`);
 
 const reports: ProfileReport[] = [];
 for (const profile of PROFILES) {
