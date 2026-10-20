@@ -186,6 +186,7 @@ class Dreamscapes {
 
   /** Back, forward, or an edited hash. */
   private onRoute(route: Route): void {
+    this.syncAddressWithPreference();
     if (this.busy) {
       this.routeChangedWhileBusy = true;
       return;
@@ -267,16 +268,25 @@ class Dreamscapes {
   private setPreference(preference: TransitionPreference): void {
     this.preference = preference;
     localPreferenceStore.write(preference);
-    // Keep a ?morph= parameter in step, or a reload would bring back the old choice.
-    const href = hrefWithPreference(window.location.href, preference);
-    if (href !== null) {
-      window.history.replaceState(window.history.state, '', href);
-    }
+    this.syncAddressWithPreference();
     if (preference === 'dissolve') {
       this.preloader.releaseClips();
     } else if (!this.busy) {
       // Mid-transition, the scene that settles next starts its own clip instead.
       this.preloader.preloadClip(this.scene);
+    }
+  }
+
+  /**
+   * Brings a ?morph= parameter in the current address in line with the visitor's choice. Each
+   * history entry keeps the address it was created with, and a reload re-applies (and saves)
+   * whatever that says; so this runs after every switch and on every entry back or forward
+   * lands on, or an old entry would quietly undo the switch.
+   */
+  private syncAddressWithPreference(): void {
+    const href = hrefWithPreference(window.location.href, this.preference);
+    if (href !== null && href !== window.location.href) {
+      window.history.replaceState(window.history.state, '', href);
     }
   }
 

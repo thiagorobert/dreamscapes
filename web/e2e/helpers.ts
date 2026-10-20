@@ -29,11 +29,15 @@ export interface ScreenPoint {
 }
 
 /**
- * The site with the morph clips switched on. Without it every edge plays the dissolve (the
- * default), so the loop tests take about a second a step instead of a clip's eight;
- * morph.spec.ts opens this address to cover the clips.
+ * The site with the morph clips switched on, as morph.spec.ts opens it to cover the clips.
  */
 export const WITH_MORPHS = './?morph=1';
+
+/**
+ * The site with the morph clips switched off. The loop tests open this, so each step takes about
+ * a second instead of a clip's eight, whichever way DEFAULT_TRANSITION is set.
+ */
+export const WITHOUT_MORPHS = './?morph=0';
 
 /** Every request for a morph clip the page makes from now on, as a live list of URLs. */
 export function recordClipRequests(page: Page): string[] {

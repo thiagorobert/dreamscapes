@@ -1,9 +1,16 @@
-// The morph switch: dissolve by default, clips when the visitor (or the URL) asks for them.
+// The morph switch: the CSS dissolve or the clips, chosen by the visitor or by the URL.
+//
+// Apart from the first test, which checks DEFAULT_TRANSITION itself, every test starts from an
+// explicit choice, so the default can be flipped without touching them.
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+import { DEFAULT_TRANSITION, MORPH_TOGGLE_LABEL } from '../src/preference';
+import type { Manifest } from '../src/types';
 import {
   CONTINUE_LABEL,
+  WITH_MORPHS,
+  WITHOUT_MORPHS,
   advance,
   hashPattern,
   hotspotCentre,
@@ -17,7 +24,7 @@ import {
 } from './helpers';
 
 function morphToggle(page: Page): Locator {
-  return page.getByRole('button', { name: /^morph (on|off)$/ });
+  return page.getByRole('button', { name: MORPH_TOGGLE_LABEL });
 }
 
 async function flip(toggle: Locator, hasTouch: boolean): Promise<void> {
@@ -39,11 +46,28 @@ function clipLeaving(id: string): string {
   return transition.video;
 }
 
+/** Serves scenes.json with every edge set to the zoom, so steps stay quick with clips on. */
+async function withoutClipEdges(page: Page): Promise<void> {
+  await page.route('**/scenes.json', async (route) => {
+    const response = await route.fetch();
+    const data = (await response.json()) as Manifest;
+    for (const scene of data.scenes) {
+      scene.transition = { type: 'zoom' };
+    }
+    await route.fulfill({ response, json: data });
+  });
+}
+
 test.beforeEach(async ({ page }) => {
   await skipIntro(page);
 });
 
-test('by default video edges play the dissolve and no clip is ever fetched', async ({
+test('a first visit gets DEFAULT_TRANSITION', async ({ page }) => {
+  await open(page, './');
+  await expectMorph(page, DEFAULT_TRANSITION === 'morph');
+});
+
+test('with the dissolve, video edges zoom and no clip is ever fetched', async ({
   page,
   hasTouch,
 }) => {
@@ -58,7 +82,9 @@ test('by default video edges play the dissolve and no clip is ever fetched', asy
   const thirdImage = page.waitForResponse((response) =>
     response.url().includes(`/dreams/${third.id}/`),
   );
-  await open(page);
+  // While the dissolve is the default, come in through the bare address so the default itself
+  // is what gets tested.
+  await open(page, DEFAULT_TRANSITION === 'dissolve' ? './' : WITHOUT_MORPHS);
   await expectMorph(page, false);
   await thirdImage;
 
@@ -77,7 +103,9 @@ test('the toggle switches the clips on and off and remembers the choice', async 
   hasTouch,
 }) => {
   const clips = recordClipRequests(page);
-  await open(page);
+  // Save "off", then drop the parameter, so the reloads below read the saved choice.
+  await open(page, WITHOUT_MORPHS);
+  await open(page, './');
   await expectMorph(page, false);
 
   await flip(morphToggle(page), hasTouch);
@@ -107,17 +135,18 @@ test('a ?morph= parameter overrides the saved choice and replaces it', async ({
   page,
   hasTouch,
 }) => {
-  await open(page);
-  await flip(morphToggle(page), hasTouch);
+  await open(page, WITH_MORPHS);
+  await expectMorph(page, true);
+  await open(page, './');
   await expectMorph(page, true);
 
-  await open(page, './?morph=0');
+  await open(page, WITHOUT_MORPHS);
   await expectMorph(page, false);
   // The parameter saved its choice: without it, the dissolve stays.
   await open(page, './');
   await expectMorph(page, false);
 
-  await open(page, `./?morph=1#/${start.next}`);
+  await open(page, `${WITH_MORPHS}#/${start.next}`);
   await expectMorph(page, true);
   await expect(page.locator('#app')).toHaveAttribute('data-scene', start.next);
   // The toggle keeps the parameter in step, so a reload does not undo the switch.
@@ -128,8 +157,38 @@ test('a ?morph= parameter overrides the saved choice and replaces it', async ({
   await expectMorph(page, false);
 });
 
+test('back and forward bring an older address in line with the switch', async ({
+  page,
+  hasTouch,
+}) => {
+  await withoutClipEdges(page);
+  // Both history entries are created with ?morph=1 in the address...
+  await open(page, WITH_MORPHS);
+  await advance(page, hasTouch);
+  // ...and the switch is turned off on the second.
+  await flip(morphToggle(page), hasTouch);
+  await expectMorph(page, false);
+  await expect(page).toHaveURL(new RegExp(`\\?morph=0#/${start.next}$`));
+
+  // Back lands on the first entry, whose address said ?morph=1; it now says what the switch says.
+  await page.goBack();
+  await expect(page.locator('#app')).toHaveAttribute('data-scene', start.id);
+  await expect(page).toHaveURL(new RegExp(`\\?morph=0#/${start.id}$`));
+  await waitUntilIdle(page);
+  await expectMorph(page, false);
+
+  // So a reload there keeps the clips off instead of switching them back on.
+  await page.reload();
+  await waitUntilIdle(page);
+  await expectMorph(page, false);
+
+  await page.goForward();
+  await expect(page).toHaveURL(new RegExp(`\\?morph=0#/${start.next}$`));
+  await expectMorph(page, false);
+});
+
 test('Tab reaches the toggle after the Continue button, and Enter flips it', async ({ page }) => {
-  await open(page);
+  await open(page, WITHOUT_MORPHS);
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: CONTINUE_LABEL })).toBeFocused();
   await page.keyboard.press('Tab');
@@ -141,12 +200,35 @@ test('Tab reaches the toggle after the Continue button, and Enter flips it', asy
   await expect(page).toHaveURL(hashPattern(start.id));
 });
 
+test('the toggle is a 44 px or taller target that keeps the counter look', async ({ page }) => {
+  await open(page, WITHOUT_MORPHS);
+  const toggle = morphToggle(page);
+  const box = await toggle.boundingBox();
+  expect(box?.height).toBeGreaterThanOrEqual(44);
+  const looks = await page.evaluate(() => {
+    const style = (selector: string): string[] => {
+      const element = document.querySelector(selector);
+      if (!element) {
+        return [];
+      }
+      const { fontSize, letterSpacing, fontFamily } = getComputedStyle(element);
+      return [fontSize, letterSpacing, fontFamily];
+    };
+    return { toggle: style('.morph-toggle'), counter: style('.depth') };
+  });
+  expect(looks.toggle).toEqual(looks.counter);
+  // Faded like the counter once it has rested, fully visible under the pointer.
+  await expect(toggle).toHaveCSS('opacity', '0.4', { timeout: 6000 });
+  await toggle.hover();
+  await expect(toggle).toHaveCSS('opacity', '1');
+});
+
 test('switching mid-transition takes effect from the next activation', async ({
   page,
   hasTouch,
 }) => {
   const clips = recordClipRequests(page);
-  await open(page);
+  await open(page, WITHOUT_MORPHS);
   await press(page, hasTouch, await hotspotCentre(page));
   await expect(page.locator('#app')).toHaveAttribute('data-busy', 'true');
   await flip(morphToggle(page), hasTouch);

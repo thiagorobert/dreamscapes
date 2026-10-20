@@ -17,6 +17,7 @@ import {
   skipIntro,
   start,
   waitUntilIdle,
+  WITHOUT_MORPHS,
 } from './helpers';
 
 test.describe('walking the loop', () => {
@@ -25,7 +26,7 @@ test.describe('walking the loop', () => {
   });
 
   test('opens on the start scene with the wordmark and counter', async ({ page }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     await expect(page).toHaveURL(hashPattern(start.id));
     await expect(page.locator('#app')).toHaveAttribute('data-scene', start.id);
     await expect(page.getByRole('img', { name: start.alt })).toBeVisible();
@@ -40,7 +41,7 @@ test.describe('walking the loop', () => {
     page,
     viewport,
   }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const width = viewport?.width ?? 0;
     const box = await page.locator('.scene-layer.is-current').boundingBox();
     const stageWidth = box?.width ?? 0;
@@ -54,7 +55,7 @@ test.describe('walking the loop', () => {
   });
 
   test('a click outside the object only ripples', async ({ page, hasTouch }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     await press(page, hasTouch, await missPoint(page));
     await expect(page.locator('.ripple')).toHaveCount(1);
     await expect(page.locator('#app')).toHaveAttribute('data-busy', 'false');
@@ -63,7 +64,7 @@ test.describe('walking the loop', () => {
   });
 
   test('the object shows a pointer cursor', async ({ page }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const centre = await hotspotCentre(page);
     const cursor = await page.evaluate(
       ({ x, y }) => {
@@ -76,7 +77,7 @@ test.describe('walking the loop', () => {
   });
 
   test('the touch margin reaches just outside the outline, and no farther', async ({ page }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const polygon = (await currentScene(page)).bridge.polygon;
     // The topmost vertex has nothing of the polygon above it, so "up" is straight outwards.
     const top = polygon.reduce((best, point) => (point[1] < best[1] ? point : best));
@@ -94,7 +95,7 @@ test.describe('walking the loop', () => {
     page,
     hasTouch,
   }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const next = await advance(page, hasTouch);
     expect(next.id).toBe(start.next);
     await expect(page.locator('#app')).toHaveAttribute('data-transition', 'zoom');
@@ -118,7 +119,7 @@ test.describe('walking the loop', () => {
     route.push(start.id);
     expect(route).toHaveLength(manifest.scenes.length);
 
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     for (const expected of route) {
       expect((await advance(page, hasTouch)).id).toBe(expected);
     }
@@ -129,7 +130,7 @@ test.describe('walking the loop', () => {
     page,
     hasTouch,
   }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     await advance(page, hasTouch);
     await page.goBack();
     await expect(page).toHaveURL(hashPattern(start.id));
@@ -144,7 +145,7 @@ test.describe('walking the loop', () => {
   });
 
   test('Tab reaches the continue button and Enter advances', async ({ page }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     await page.keyboard.press('Tab');
     const button = page.getByRole('button', { name: CONTINUE_LABEL });
     await expect(button).toBeFocused();
@@ -158,7 +159,7 @@ test.describe('walking the loop', () => {
   });
 
   test('a reload keeps the scene and the counter', async ({ page, hasTouch }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     await advance(page, hasTouch);
     await page.reload();
     await waitUntilIdle(page);
@@ -168,18 +169,18 @@ test.describe('walking the loop', () => {
 
   test('a deep link opens that scene', async ({ page }) => {
     const target = sceneById(start.next);
-    await open(page, `./#/${target.id}`);
+    await open(page, `${WITHOUT_MORPHS}#/${target.id}`);
     await expect(page.locator('#app')).toHaveAttribute('data-scene', target.id);
   });
 
   test('an unknown hash shows the start scene', async ({ page }) => {
-    await open(page, './#/nowhere-at-all');
+    await open(page, `${WITHOUT_MORPHS}#/nowhere-at-all`);
     await expect(page.locator('#app')).toHaveAttribute('data-scene', start.id);
     await expect(page).toHaveURL(hashPattern(start.id));
   });
 
   test('three misses make the object shimmer', async ({ page, hasTouch }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const shimmer = page.locator('.hotspot.is-shimmering');
     for (let miss = 0; miss < 3; miss += 1) {
       await expect(shimmer).toHaveCount(0);
@@ -191,7 +192,7 @@ test.describe('walking the loop', () => {
 
   test('twenty idle seconds make the object shimmer', async ({ page }) => {
     await page.clock.install();
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const shimmer = page.locator('.hotspot.is-shimmering');
     await page.clock.fastForward(19_000);
     await expect(shimmer).toHaveCount(0);
@@ -200,7 +201,7 @@ test.describe('walking the loop', () => {
   });
 
   test('dragging pans within the image edges and is not a miss', async ({ page, viewport }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const layer = page.locator('.scene-layer.is-current');
     const width = viewport?.width ?? 0;
     const height = viewport?.height ?? 0;
@@ -231,7 +232,7 @@ test.describe('walking the loop', () => {
   });
 
   test('a press released outside the window leaves no drag behind', async ({ page, viewport }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const layer = page.locator('.scene-layer.is-current');
     const before = (await layer.boundingBox())?.x;
     const width = viewport?.width ?? 0;
@@ -251,7 +252,7 @@ test.describe('walking the loop', () => {
 
   test('a finger swipe pans the stage', async ({ page, hasTouch, viewport }) => {
     test.skip(!hasTouch, 'touch devices only');
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const layer = page.locator('.scene-layer.is-current');
     const before = (await layer.boundingBox())?.x ?? 0;
     const y = (viewport?.height ?? 0) / 2;
@@ -275,7 +276,7 @@ test.describe('walking the loop', () => {
     test.use({ reducedMotion: 'reduce' });
 
     test('still navigates, with a plain crossfade', async ({ page, hasTouch }) => {
-      await open(page);
+      await open(page, WITHOUT_MORPHS);
       await advance(page, hasTouch);
       await expect(page.locator('#app')).toHaveAttribute('data-transition', 'fade');
       await advance(page, hasTouch);
@@ -283,7 +284,7 @@ test.describe('walking the loop', () => {
     });
 
     test('the hint is a still highlight', async ({ page, hasTouch }) => {
-      await open(page);
+      await open(page, WITHOUT_MORPHS);
       for (let miss = 0; miss < 3; miss += 1) {
         await press(page, hasTouch, await missPoint(page));
       }
@@ -298,7 +299,7 @@ test.describe('first visit', () => {
     page,
     hasTouch,
   }) => {
-    await open(page);
+    await open(page, WITHOUT_MORPHS);
     const intro = page.getByText(INTRO_TEXT);
     await expect(intro).toBeVisible();
     // Even a tap right on the object only dismisses the overlay.
