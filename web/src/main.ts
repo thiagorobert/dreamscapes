@@ -258,7 +258,9 @@ class Dreamscapes {
     void picture.ready
       .then(() => this.preloader.warm([next, afterNext]))
       .then(() => {
-        if (this.scene === layer.scene) {
+        // Not while a transition runs: that one is already leaving this scene, so its clip would
+        // only be wasted bandwidth. The scene that settles next buffers its own.
+        if (this.scene === layer.scene && !this.busy) {
           this.preloader.preloadClip(layer.scene);
         }
       });

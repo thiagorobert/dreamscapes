@@ -228,11 +228,25 @@ test('switching mid-transition takes effect from the next activation', async ({
   hasTouch,
 }) => {
   const clips = recordClipRequests(page);
+  // Hold the third scene's image, so the start scene's preloading is still running when the
+  // object is clicked, and finishes mid-transition: the moment a clip for the edge already being
+  // crossed could slip out.
+  const third = sceneById(sceneById(start.next).next);
+  let release = (): void => undefined;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/dreams/${third.id}/**`, async (route) => {
+    await released;
+    await route.continue();
+  });
+
   await open(page, WITHOUT_MORPHS);
   await press(page, hasTouch, await hotspotCentre(page));
   await expect(page.locator('#app')).toHaveAttribute('data-busy', 'true');
   await flip(morphToggle(page), hasTouch);
   await expectMorph(page, true);
+  release();
 
   // The transition already under way stays the dissolve...
   await expect(page).toHaveURL(hashPattern(start.next));
