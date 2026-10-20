@@ -77,9 +77,14 @@ export function hrefWithPreference(href: string, preference: TransitionPreferenc
   return url.href;
 }
 
+/** The switch's accessible name; its state is announced from aria-pressed. */
+export const MORPH_TOGGLE_LABEL = 'morph clips';
+
 /**
  * The faint "morph off" / "morph on" switch in the bottom-left corner. A real toggle button, so
- * it is in the tab order (after the hidden Continue button) and Enter or Space flips it.
+ * it is in the tab order (after the hidden Continue button) and Enter or Space flips it. Screen
+ * readers hear a fixed name, "morph clips", with pressed or not pressed, as toggle buttons
+ * should sound; the visible text spells the state out for everyone else.
  */
 export class MorphToggle {
   readonly button: HTMLButtonElement;
@@ -92,7 +97,7 @@ export class MorphToggle {
     this.button = document.createElement('button');
     this.button.type = 'button';
     this.button.className = 'chrome morph-toggle';
-    this.button.title = 'Play the video morphs between dreams';
+    this.button.setAttribute('aria-label', MORPH_TOGGLE_LABEL);
     this.button.addEventListener('click', () => {
       this.preference = this.preference === 'morph' ? 'dissolve' : 'morph';
       this.render();

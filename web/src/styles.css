@@ -229,11 +229,14 @@ body {
 .morph-toggle {
   left: max(var(--gutter), env(safe-area-inset-left));
   bottom: max(var(--gutter), env(safe-area-inset-bottom));
-  /* The padding enlarges the hit area; the negative margin keeps the text on the gutter. */
-  margin: -8px;
-  padding: 8px;
+  /*
+   * Transparent padding makes a 45 px tall target for fingers (13 px of text plus 16 px above
+   * and below); the negative margin keeps the text itself on the gutter, like the counter's.
+   */
+  margin: -16px -12px;
+  padding: 16px 12px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: none;
   font-family: inherit;
   cursor: pointer;
@@ -244,11 +247,13 @@ body {
 .morph-toggle:hover,
 .morph-toggle:focus-visible {
   animation: none;
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .morph-toggle:focus-visible {
   outline: 1px solid var(--foreground);
+  /* Hug the text rather than the whole padded target. */
+  outline-offset: -10px;
 }
 
 /* Set again on every change, so a new count shows brightly before fading back. */
@@ -352,8 +357,7 @@ body {
 .continue:focus-visible {
   position: fixed;
   z-index: 5;
-  /* Above the row of the counter and the morph switch, which it would cover on a phone. */
-  bottom: calc(max(var(--gutter), env(safe-area-inset-bottom)) + 28px);
+  bottom: max(var(--gutter), env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   padding: 0.6em 1.1em;
@@ -366,6 +370,16 @@ body {
   white-space: nowrap;
   outline: 2px solid var(--foreground);
   outline-offset: 2px;
+}
+
+/*
+ * On a phone the centred button is wide enough to cover the morph switch and the counter in the
+ * bottom corners, so it rises above their row there. Wider screens keep it on the gutter.
+ */
+@media (max-width: 520px) {
+  .continue:focus-visible {
+    bottom: calc(max(var(--gutter), env(safe-area-inset-bottom)) + 28px);
+  }
 }
 
 .continue[aria-disabled='true'] {

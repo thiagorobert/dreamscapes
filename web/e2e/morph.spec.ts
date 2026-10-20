@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { MORPH_TOGGLE_LABEL } from '../src/preference';
 import type { Manifest } from '../src/types';
 import {
   advance,
@@ -210,10 +211,9 @@ test.describe('with reduced motion', () => {
       route.fulfill({ path: FIXTURE, contentType: 'video/mp4' }),
     );
     await open(page, WITH_MORPHS);
-    await expect(page.getByRole('button', { name: 'morph on' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    const toggle = page.getByRole('button', { name: MORPH_TOGGLE_LABEL });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toggle).toHaveText('morph on');
     await advance(page, hasTouch);
     await expect(page.locator('#app')).toHaveAttribute('data-transition', 'fade');
     expect(clips).toEqual([]);
