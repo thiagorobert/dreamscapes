@@ -69,14 +69,16 @@ for the root path `/`. To test a Pages build locally:
 `pnpm walk <url>` checks a deployed copy, for example
 `pnpm walk https://blog.thiago.pub/dreamscapes/`. Unlike `pnpm e2e`, which tests a local build,
 it drives the deployed site, at 1440x900 and in the iPhone 13 profile. By default it walks with
-the dissolve (`?morph=0`) and fails if any morph clip is requested; `--morph` walks with the real
-clips (`?morph=1`). The report names the mode and what the page's morph switch showed. Each
-profile starts fresh and dismisses the first-visit overlay. It clicks or taps the centroid of every scene's hotspot polygon, and checks the address,
-the counter and the transition played at each step, plus the return to the start after the
-last scene. Then it checks back, forward, a deep link and an unknown hash. It prints every console
-error and failed request, and exits 1 if any check fails. `--json <file>` saves the report and
-`--screenshots <dir>` saves one picture per step. With the dissolve the walk takes under a
-minute; with `--morph` it takes about three, because each clip plays for eight seconds.
+the dissolve (`?morph=0`) and fails if any morph clip is requested; `--morph`, or `?morph=1` in
+the URL it is given, walks with the real clips, and `--morph` wins if the two disagree. The
+report says which mode it used and why, and what the page's morph switch showed. Each profile
+starts fresh and dismisses the first-visit overlay. It clicks or taps the centroid of every
+scene's hotspot polygon, and checks the address, the counter and the transition played at each
+step, plus the return to the start after the last scene. Then it checks back, forward, a deep
+link and an unknown hash. It prints every console error and failed request, and exits 1 if any
+check fails. `--json <file>` saves the report and `--screenshots <dir>` saves one picture per
+step. With the dissolve the walk takes under a minute; with the clips it takes about three,
+because each clip plays for eight seconds.
 
 ## Running the pipeline
 
